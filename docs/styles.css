@@ -2,12 +2,10 @@
   --bg: #dee7f9;
   --ink: #333333;
   --ink-soft: #506082;
-  --panel: rgba(255, 255, 255, 0.96);
-  --line: rgba(51, 71, 142, 0.2);
+  --line: rgba(51, 71, 142, 0.24);
+  --panel: rgba(255, 255, 255, 0.95);
   --primary: #33478e;
-  --primary-ink: #ffffff;
-  --accent: #eb8d75;
-  --ok: #33478e;
+  --primary-soft: #35eaff;
   --radius: 8px;
 }
 
@@ -18,10 +16,9 @@
 body {
   margin: 0;
   color: var(--ink);
-  background: linear-gradient(180deg, #dee7f9 0%, #eff4fe 42%, #ffffff 100%);
+  background: linear-gradient(180deg, #dee7f9 0%, #eef3ff 45%, #ffffff 100%);
   font-family: "Noto Sans JP", sans-serif;
-  min-height: 100vh;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .bg-glow {
@@ -35,38 +32,59 @@ body {
 .bg-glow-a {
   width: 260px;
   height: 260px;
-  background: rgba(53, 234, 255, 0.14);
+  background: rgba(53, 234, 255, 0.16);
   top: 8%;
-  left: 6%;
+  left: 4%;
 }
 
 .bg-glow-b {
-  width: 320px;
-  height: 320px;
+  width: 300px;
+  height: 300px;
   background: rgba(51, 71, 142, 0.18);
-  bottom: 6%;
-  right: 4%;
+  right: 2%;
+  bottom: 8%;
 }
 
 .container {
-  max-width: 1000px;
+  max-width: 980px;
   margin: 0 auto;
-  padding: 28px 18px 80px;
+  padding: 28px 16px 64px;
+}
+
+.reveal {
+  animation: revealUp 0.7s ease both;
+}
+
+.delay-1 {
+  animation-delay: 0.08s;
+}
+
+.delay-2 {
+  animation-delay: 0.16s;
+}
+
+@keyframes revealUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .hero {
-  padding: 10px 2px 24px;
+  padding: 6px 2px 18px;
 }
 
 .eyebrow {
   display: inline-block;
-  padding: 6px 10px;
   border: 1px solid var(--line);
-  border-radius: 0;
-  font-family: "Noto Sans JP", sans-serif;
+  padding: 4px 10px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.8);
-  color: #33478e;
+  color: var(--primary);
+  background: rgba(255, 255, 255, 0.86);
 }
 
 h1,
@@ -77,26 +95,30 @@ h3 {
 }
 
 h1 {
-  margin-top: 12px;
-  font-size: clamp(30px, 6vw, 46px);
-  letter-spacing: 0.01em;
-  color: #2b2f42;
+  margin-top: 10px;
+  font-size: clamp(29px, 5.6vw, 44px);
+  line-height: 1.24;
 }
 
 h2 {
-  font-size: 22px;
-  margin-bottom: 14px;
+  font-size: 23px;
+  margin-bottom: 10px;
 }
 
 h3 {
-  font-size: 18px;
+  font-size: 17px;
   margin-bottom: 8px;
 }
 
 .lead {
-  margin: 10px 0 0;
   color: var(--ink-soft);
-  max-width: 700px;
+  margin-top: 12px;
+  max-width: 760px;
+}
+
+.section-lead {
+  margin: 0 0 12px;
+  color: var(--ink-soft);
 }
 
 .badges {
@@ -107,21 +129,19 @@ h3 {
 }
 
 .badges span {
-  background: rgba(255, 255, 255, 0.85);
   border: 1px solid var(--line);
-  border-radius: 0;
-  padding: 6px 10px;
+  padding: 5px 10px;
   font-size: 13px;
+  background: rgba(255, 255, 255, 0.9);
 }
 
 .panel {
+  margin-top: 14px;
+  padding: 18px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  backdrop-filter: blur(3px);
-  box-shadow: 0 8px 18px rgba(32, 44, 88, 0.08);
-  padding: 20px;
-  margin-top: 14px;
+  box-shadow: 0 10px 24px rgba(40, 60, 130, 0.08);
 }
 
 .hidden {
@@ -131,7 +151,7 @@ h3 {
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 label {
@@ -142,103 +162,139 @@ label {
   font-weight: 500;
 }
 
-input,
-select,
-textarea {
-  width: 100%;
-  border: 1px solid rgba(51, 71, 142, 0.24);
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 6px;
-  padding: 10px 12px;
-  font-size: 15px;
-  color: var(--ink);
-  font-family: inherit;
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-  outline: 2px solid rgba(51, 71, 142, 0.2);
-  border-color: var(--primary);
-}
-
 .full {
   grid-column: 1 / -1;
 }
 
+input,
+select {
+  border: 1px solid rgba(51, 71, 142, 0.26);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(51, 71, 142, 0.18);
+  border-color: var(--primary);
+}
+
 .btn {
   border: 0;
-  cursor: pointer;
   border-radius: 0;
-  padding: 11px 16px;
+  cursor: pointer;
+  font-family: "Noto Sans JP", sans-serif;
   font-size: 15px;
   font-weight: 700;
-  font-family: "Noto Sans JP", sans-serif;
+  text-decoration: none;
+  padding: 11px 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-primary {
-  color: var(--primary-ink);
-  background: linear-gradient(110deg, #33478e 0%, #35eaff 180%);
-  box-shadow: 0 4px 12px rgba(35, 52, 116, 0.22);
+  color: #fff;
+  background: linear-gradient(108deg, var(--primary) 0%, var(--primary-soft) 185%);
+  box-shadow: 0 4px 14px rgba(34, 52, 118, 0.24);
 }
 
 .btn-primary:hover {
-  filter: brightness(1.06);
+  filter: brightness(1.05);
 }
 
 .btn-ghost {
   color: var(--ink);
+  background: rgba(255, 255, 255, 0.95);
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.9);
 }
 
-.btn-mini {
-  padding: 7px 12px;
-  font-size: 13px;
+.result-top {
+  margin-top: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 280px 1fr;
+}
+
+.score-card,
+.card,
+.benefit-box {
   border: 1px solid var(--line);
-  background: #fff;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.96);
+  padding: 15px;
+}
+
+.score-card {
+  background: linear-gradient(155deg, #ffffff, #edf3ff);
+}
+
+.score-label {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.score-main {
+  margin: 4px 0;
+  font-size: 54px;
+  line-height: 1;
+  color: var(--primary);
+  font-family: "Noto Serif JP", serif;
+}
+
+.rank {
+  margin: 0;
+  font-weight: 700;
 }
 
 .result-grid {
+  margin-top: 12px;
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 12px;
 }
 
-.card {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.96);
-  padding: 16px;
-}
-
-.card.accent {
-  border-color: rgba(51, 71, 142, 0.34);
-  background: linear-gradient(160deg, #ffffff, #f4f8ff);
-}
-
-.card .title {
+.title {
   margin: 0 0 8px;
   font-weight: 700;
 }
 
-.source a {
-  color: var(--primary);
+.gated {
+  position: relative;
+  overflow: hidden;
 }
 
-.range {
-  font-size: clamp(20px, 3.4vw, 32px);
-  line-height: 1.2;
-  margin: 4px 0 8px;
-  color: var(--ok);
-  font-family: "Noto Serif JP", serif;
+.gated::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 5%, rgba(255, 255, 255, 0.78) 60%, rgba(255, 255, 255, 0.95) 100%);
 }
 
-.score-main {
-  margin: 0 0 8px;
-  font-size: 26px;
-  font-family: "Noto Serif JP", serif;
+.gated-list {
+  filter: blur(2.6px);
+  user-select: none;
+}
+
+.benefit-box {
+  margin-top: 12px;
+  background: linear-gradient(150deg, #ffffff, #f5f8ff);
+}
+
+.cta-stack {
+  margin-top: 12px;
+}
+
+.cta-row {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .small {
@@ -246,34 +302,23 @@ textarea:focus {
   font-size: 13px;
 }
 
-.cta-row {
-  margin-top: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+details {
+  border-top: 1px solid rgba(51, 71, 142, 0.2);
+  padding: 10px 0;
 }
 
-.price-presets {
-  display: flex;
-  gap: 8px;
-  align-items: end;
+details:first-of-type {
+  margin-top: 6px;
 }
 
-.submit-result {
-  margin-top: 14px;
-  border: 1px solid rgba(51, 71, 142, 0.25);
-  background: rgba(234, 244, 255, 0.9);
-  border-radius: 8px;
-  padding: 12px;
+summary {
+  cursor: pointer;
+  font-weight: 700;
 }
 
-pre {
-  overflow: auto;
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(10, 41, 57, 0.9);
-  color: #f4fbff;
-  font-size: 12px;
+.caution {
+  border-color: rgba(235, 141, 117, 0.48);
+  background: linear-gradient(150deg, #ffffff, #fff6f2);
 }
 
 ul {
@@ -281,17 +326,26 @@ ul {
   padding-left: 18px;
 }
 
+a {
+  color: var(--primary);
+}
+
 @media (max-width: 860px) {
+  .container {
+    padding: 20px 14px 52px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
   .form-grid,
+  .result-top,
   .result-grid {
     grid-template-columns: 1fr;
   }
 
-  .container {
-    padding: 20px 14px 56px;
-  }
-
-  .panel {
-    padding: 16px;
+  .score-main {
+    font-size: 48px;
   }
 }

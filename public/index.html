@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Patent Value Check | 60秒 特許価値診断</title>
+    <title>Patent Value Check | 無料特許価値診断</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet" />
@@ -12,30 +12,27 @@
   <body>
     <div class="bg-glow bg-glow-a"></div>
     <div class="bg-glow bg-glow-b"></div>
+
     <main class="container">
-      <header class="hero">
+      <header class="hero reveal">
         <p class="eyebrow">Patent Value Check</p>
-        <h1>Patent Value Check</h1>
-        <p class="lead">特許番号を入れるだけで、価値レンジと次の一手を提示。結果をそのまま登録フォームへ引き継げます。</p>
+        <h1>あなたの特許の価値を、すぐに診断します</h1>
+        <p class="lead">公開情報をもとに、Patent Value Scoreと評価根拠を提示。詳細分析と収益化ルートはPatentRevenueで確認できます。</p>
         <div class="badges">
-          <span>国内特許のみ対応</span>
-          <span>概算レンジ表示</span>
-          <span>登録・相談無料 / 成約時15%</span>
+          <span>無料</span>
+          <span>30秒目安</span>
+          <span>公開情報のみ参照</span>
         </div>
       </header>
 
-      <section id="screen-input" class="panel">
-        <h2>1. 特許番号を入力</h2>
+      <section id="screen-input" class="panel reveal delay-1">
+        <h2>無料診断を開始</h2>
+        <p class="section-lead">特許番号・公開番号・キーワードのいずれかを入力してください。</p>
+
         <form id="diagnosis-form" class="form-grid">
-          <label>
-            特許番号
-            <input
-              id="patent-number"
-              name="patentNumber"
-              type="text"
-              placeholder="例: 特許第7091234号"
-              required
-            />
+          <label class="full">
+            入力
+            <input id="query" name="query" type="text" placeholder="例: 特許第7091234号 / 特開2020-123456 / 画像解析 異常検知" required />
           </label>
 
           <label>
@@ -70,93 +67,67 @@
             </select>
           </label>
 
-          <button type="submit" class="btn btn-primary">診断する（無料）</button>
+          <button type="submit" class="btn btn-primary">価値を診断する</button>
         </form>
       </section>
 
-      <section id="screen-result" class="panel hidden">
-        <h2>2. 診断結果</h2>
+      <section id="screen-result" class="panel hidden reveal">
+        <h2>診断結果（ティザー）</h2>
+        <p class="section-lead">まずは主要指標のみ公開します。詳細分析と収益化導線は会員向けです。</p>
 
-        <div class="result-grid">
-          <article class="card" id="patent-summary"></article>
-          <article class="card accent" id="value-estimate"></article>
+        <div class="result-top">
+          <article class="score-card" id="teaser-score"></article>
+          <article class="card" id="teaser-summary"></article>
         </div>
 
         <div class="result-grid">
-          <article class="card" id="score-breakdown"></article>
-          <article class="card" id="next-action"></article>
+          <article class="card" id="teaser-reasons"></article>
+          <article class="card gated" id="teaser-gated"></article>
         </div>
 
-        <div class="cta-row">
-          <button id="to-register" class="btn btn-primary">この内容で登録フォームへ（入力済み）</button>
-          <button id="back-to-input" class="btn btn-ghost">入力を修正する</button>
-        </div>
-      </section>
+        <article class="benefit-box">
+          <h3>会員登録で見られる内容</h3>
+          <ul>
+            <li>根拠の内訳を数値で確認</li>
+            <li>関連企業リストの閲覧</li>
+            <li>収益化の選択肢の提示</li>
+            <li>結果の保存・比較</li>
+          </ul>
+        </article>
 
-      <section id="screen-register" class="panel hidden">
-        <h2>3. 登録フォーム（診断内容を反映済み）</h2>
-
-        <form id="register-form" class="form-grid">
-          <label>
-            会社名
-            <input id="company-name" name="companyName" type="text" placeholder="株式会社◯◯" required />
-          </label>
-
-          <label>
-            担当者名
-            <input id="contact-name" name="contactName" type="text" placeholder="山田 太郎" required />
-          </label>
-
-          <label>
-            メール
-            <input id="email" name="email" type="email" placeholder="name@example.com" required />
-          </label>
-
-          <label>
-            特許番号
-            <input id="reg-patent-number" name="patentNumber" type="text" readonly />
-          </label>
-
-          <label>
-            特許タイトル
-            <input id="reg-title" name="title" type="text" />
-          </label>
-
-          <label>
-            技術カテゴリ
-            <input id="reg-category" name="category" type="text" />
-          </label>
-
-          <label>
-            支援方法
-            <select id="reg-support" name="supportMethod">
-              <option value="license">ライセンス希望</option>
-              <option value="sale">売却希望</option>
-              <option value="both">売却 + ライセンス</option>
-              <option value="infringement">侵害発見支援</option>
-            </select>
-          </label>
-
-          <label>
-            おすすめ希望金額
-            <input id="reg-price" name="targetPrice" type="number" step="10000" min="0" />
-          </label>
-
-          <div class="price-presets">
-            <button type="button" class="btn btn-mini" data-price-preset="low">下限を使う</button>
-            <button type="button" class="btn btn-mini" data-price-preset="mid">中央値を使う</button>
-            <button type="button" class="btn btn-mini" data-price-preset="high">上限を使う</button>
+        <div class="cta-stack">
+          <a id="join-link" href="https://patent-revenue.iprich.jp/" target="_blank" rel="noopener noreferrer" class="btn btn-primary">PatentRevenueで詳細分析と収益化ルートを見る</a>
+          <p class="small">登録導線には `source=patent-value-check` などの計測パラメータを付与します。</p>
+          <div class="cta-row">
+            <button id="report-signup" class="btn btn-ghost" type="button">登録完了を報告（デモ計測）</button>
+            <button id="back-to-input" class="btn btn-ghost" type="button">入力を修正する</button>
           </div>
+        </div>
+      </section>
 
-          <label class="full">
-            概要メモ
-            <textarea id="reg-note" name="note" rows="4"></textarea>
-          </label>
+      <section id="faq" class="panel reveal delay-2">
+        <h2>よくある質問</h2>
+        <details>
+          <summary>このスコアは何を意味しますか</summary>
+          <p>公開情報から算出した相対的な価値目安です。影響度・権利の広さ・実務上の強さ・収益化の近さを合成しています。</p>
+        </details>
+        <details>
+          <summary>実際の売買価格を保証しますか</summary>
+          <p>保証しません。取引条件、交渉、法的状況により価格は変動します。</p>
+        </details>
+        <details>
+          <summary>データソースは何ですか</summary>
+          <p>本モックは公開特許情報を想定した疑似データです。実装時はJ-PlatPat等の公開データ連携を前提にしています。</p>
+        </details>
+        <details>
+          <summary>入力した情報は保存されますか</summary>
+          <p>モックでは同一入力の再計算を避けるため、ブラウザ内に一時キャッシュします。</p>
+        </details>
+      </section>
 
-          <button type="submit" class="btn btn-primary">この内容で仮登録する（デモ）</button>
-        </form>
-
-        <div id="register-result" class="submit-result hidden"></div>
+      <section class="panel caution reveal delay-2">
+        <h2>注意事項</h2>
+        <p>このスコアは公開情報にもとづく目安で、取引価格や成約を保証するものではありません。法的助言を目的とするものではありません。</p>
       </section>
     </main>
 

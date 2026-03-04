@@ -1,131 +1,106 @@
 const mockPatents = {
   "7091234": {
+    id: "7091234",
     title: "製造ライン異常検知システム",
     applicant: "株式会社ミライファクトリー",
+    applicantType: "企業",
     registrationDate: "2022-11-15",
     filingDate: "2019-02-14",
     category: "製造DX / AI",
     status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/"
+    officialUrl: "https://www.j-platpat.inpit.go.jp/",
+    metrics: { citations: 34, citationGrowth: 18, claimCount: 12, familySize: 6, classRank: 71, marketPlayers: 24, filingDensity: 68, prosecutionMonths: 20 }
   },
   "6810455": {
+    id: "6810455",
     title: "高効率熱交換モジュール",
     applicant: "東都エネルギー株式会社",
+    applicantType: "企業",
     registrationDate: "2021-06-30",
     filingDate: "2017-08-08",
     category: "エネルギー / 材料",
     status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/"
+    officialUrl: "https://www.j-platpat.inpit.go.jp/",
+    metrics: { citations: 22, citationGrowth: 8, claimCount: 9, familySize: 4, classRank: 60, marketPlayers: 17, filingDensity: 58, prosecutionMonths: 26 }
   },
   "7420901": {
+    id: "7420901",
     title: "マルチモーダル医療画像解析装置",
     applicant: "メディコアテック株式会社",
+    applicantType: "企業",
     registrationDate: "2024-03-22",
     filingDate: "2021-10-03",
     category: "医療機器 / 画像解析",
     status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/"
+    officialUrl: "https://www.j-platpat.inpit.go.jp/",
+    metrics: { citations: 28, citationGrowth: 23, claimCount: 15, familySize: 7, classRank: 78, marketPlayers: 26, filingDensity: 72, prosecutionMonths: 18 }
   }
 };
 
-const categoryRoyalty = {
-  "製造DX / AI": [0.012, 0.045],
-  "エネルギー / 材料": [0.01, 0.035],
-  "医療機器 / 画像解析": [0.02, 0.06],
-  "通信 / IoT": [0.012, 0.04],
-  "ソフトウェア": [0.01, 0.05],
-  default: [0.01, 0.04]
+const benchmark = {
+  "製造DX / AI": { citations: [3, 42], growth: [-5, 30], claims: [4, 20], family: [1, 10], players: [5, 35], density: [20, 90] },
+  "エネルギー / 材料": { citations: [2, 32], growth: [-8, 22], claims: [3, 16], family: [1, 8], players: [4, 25], density: [18, 70] },
+  "医療機器 / 画像解析": { citations: [3, 45], growth: [-3, 35], claims: [5, 24], family: [2, 12], players: [6, 38], density: [22, 88] },
+  "通信 / IoT": { citations: [2, 38], growth: [-6, 28], claims: [4, 18], family: [1, 9], players: [5, 32], density: [20, 84] },
+  ソフトウェア: { citations: [1, 34], growth: [-8, 26], claims: [3, 16], family: [1, 8], players: [5, 28], density: [20, 80] },
+  default: { citations: [1, 32], growth: [-10, 24], claims: [3, 16], family: [1, 8], players: [4, 24], density: [15, 72] }
 };
 
-const salesRangeMap = {
-  lt100m: { min: 30_000_000, max: 100_000_000, label: "〜1億円" },
-  "100m_1b": { min: 100_000_000, max: 1_000_000_000, label: "1億円〜10億円" },
-  "1b_10b": { min: 1_000_000_000, max: 10_000_000_000, label: "10億円〜100億円" },
-  gt10b: { min: 10_000_000_000, max: 30_000_000_000, label: "100億円以上" },
-  default: { min: 10_000_000, max: 50_000_000, label: "未選択" }
-};
-
-const useStatusLabel = {
-  using: "現在使っている",
-  planned: "これから使う予定",
-  not_using: "使っていない",
-  "": "未選択"
-};
-
-const supportMap = {
-  license: "license",
-  sale: "sale",
-  both: "both",
-  infringement: "infringement"
+const useStatusFactor = {
+  using: 1,
+  planned: 0.92,
+  not_using: 0.84,
+  "": 0.88
 };
 
 const diagnosisForm = document.getElementById("diagnosis-form");
-const registerForm = document.getElementById("register-form");
-
 const screenInput = document.getElementById("screen-input");
 const screenResult = document.getElementById("screen-result");
-const screenRegister = document.getElementById("screen-register");
-
-const summaryEl = document.getElementById("patent-summary");
-const estimateEl = document.getElementById("value-estimate");
-const scoreEl = document.getElementById("score-breakdown");
-const actionEl = document.getElementById("next-action");
-const registerResultEl = document.getElementById("register-result");
-
-const toRegisterBtn = document.getElementById("to-register");
+const scoreEl = document.getElementById("teaser-score");
+const summaryEl = document.getElementById("teaser-summary");
+const reasonsEl = document.getElementById("teaser-reasons");
+const gatedEl = document.getElementById("teaser-gated");
+const joinLink = document.getElementById("join-link");
+const reportSignupBtn = document.getElementById("report-signup");
 const backToInputBtn = document.getElementById("back-to-input");
 
-let latestDiagnosis = null;
+let latestResult = null;
 
-function normalizePatentNumber(input) {
-  return (input || "")
-    .replace(/特許第/g, "")
-    .replace(/号/g, "")
-    .replace(/[\s-]/g, "")
-    .replace(/[^0-9]/g, "");
+function trackEvent(name, payload = {}) {
+  window.dataLayer = window.dataLayer || [];
+  const event = {
+    event: name,
+    ts: new Date().toISOString(),
+    ...payload
+  };
+  window.dataLayer.push(event);
+  console.info("[event]", event);
+}
+
+function hashString(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
 }
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function currency(value) {
-  return new Intl.NumberFormat("ja-JP", {
-    style: "currency",
-    currency: "JPY",
-    maximumFractionDigits: 0
-  }).format(value);
+function normalizePatentNumber(input) {
+  return String(input || "")
+    .replace(/特許第/g, "")
+    .replace(/号/g, "")
+    .replace(/[\s-]/g, "")
+    .replace(/[^0-9]/g, "");
 }
 
-function formatDate(dateString) {
-  if (!dateString) return "不明";
-  const dt = new Date(dateString);
-  if (Number.isNaN(dt.getTime())) return "不明";
-  return new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium" }).format(dt);
-}
-
-function pseudoPatent(number) {
-  const n = Number(number.slice(-4)) || 1234;
-  const categories = ["通信 / IoT", "ソフトウェア", "製造DX / AI", "エネルギー / 材料"];
-  const category = categories[n % categories.length];
-  const filingYear = 2010 + (n % 14);
-  const filingMonth = ((n % 12) + 1).toString().padStart(2, "0");
-  const filingDay = ((n % 27) + 1).toString().padStart(2, "0");
-
-  return {
-    title: `特許第${number}号（自動取得サンプル）`,
-    applicant: "取得元未連携（モック）",
-    registrationDate: `${filingYear + 2}-${filingMonth}-${filingDay}`,
-    filingDate: `${filingYear}-${filingMonth}-${filingDay}`,
-    category,
-    status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/"
-  };
-}
-
-async function fetchPatentInfo(normalizedNumber) {
-  await new Promise((resolve) => setTimeout(resolve, 450));
-  return mockPatents[normalizedNumber] || pseudoPatent(normalizedNumber);
+function percentile(value, min, max) {
+  if (max <= min) return 50;
+  return clamp(Math.round(((value - min) / (max - min)) * 100), 0, 100);
 }
 
 function remainingYearsFromFiling(filingDate) {
@@ -134,190 +109,200 @@ function remainingYearsFromFiling(filingDate) {
 
   const expire = new Date(filing);
   expire.setFullYear(expire.getFullYear() + 20);
-
-  const now = new Date();
-  const remainMs = expire.getTime() - now.getTime();
-  const years = remainMs / (1000 * 60 * 60 * 24 * 365.25);
+  const years = (expire.getTime() - Date.now()) / (1000 * 60 * 60 * 24 * 365.25);
   return clamp(years, 0, 20);
 }
 
-function annuityFactor(rate, years) {
-  return (1 - Math.pow(1 + rate, -years)) / rate;
+function getCategoryBase(category) {
+  return benchmark[category] || benchmark.default;
+}
+
+function getRank(score) {
+  if (score >= 80) return "A";
+  if (score >= 65) return "B";
+  if (score >= 50) return "C";
+  return "D";
+}
+
+function resultId() {
+  return `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function pseudoPatentFromQuery(query, number) {
+  const token = number || query;
+  const h = hashString(token);
+  const categories = ["通信 / IoT", "ソフトウェア", "製造DX / AI", "エネルギー / 材料", "医療機器 / 画像解析"];
+  const category = categories[h % categories.length];
+  const filingYear = 2010 + (h % 14);
+  const filingMonth = String((h % 12) + 1).padStart(2, "0");
+  const filingDay = String((h % 27) + 1).padStart(2, "0");
+  const applicantType = ["企業", "大学", "個人"][h % 3];
+
+  return {
+    id: number || `KW${(h % 900000 + 100000).toString()}`,
+    title: number ? `特許第${number}号（モック推定）` : `「${query}」関連技術（モック推定）`,
+    applicant: applicantType === "企業" ? "モックテック株式会社" : applicantType === "大学" ? "モック工業大学" : "モック発明者",
+    applicantType,
+    registrationDate: `${filingYear + 2}-${filingMonth}-${filingDay}`,
+    filingDate: `${filingYear}-${filingMonth}-${filingDay}`,
+    category,
+    status: "登録",
+    officialUrl: "https://www.j-platpat.inpit.go.jp/",
+    metrics: {
+      citations: 2 + (h % 43),
+      citationGrowth: -6 + (h % 34),
+      claimCount: 3 + (h % 18),
+      familySize: 1 + (h % 10),
+      classRank: 35 + (h % 58),
+      marketPlayers: 5 + (h % 33),
+      filingDensity: 20 + (h % 70),
+      prosecutionMonths: 12 + (h % 28)
+    }
+  };
+}
+
+async function fetchPatentInfo(query) {
+  const patentNumber = normalizePatentNumber(query);
+  const cacheKey = `pvc_cache_${patentNumber || query}`;
+  const cached = localStorage.getItem(cacheKey);
+
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (Date.now() - parsed.cachedAt < 24 * 60 * 60 * 1000) {
+        return parsed.payload;
+      }
+    } catch (error) {
+      console.warn("cache parse failed", error);
+    }
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  const payload = patentNumber.length >= 6 ? mockPatents[patentNumber] || pseudoPatentFromQuery(query, patentNumber) : pseudoPatentFromQuery(query, "");
+  localStorage.setItem(cacheKey, JSON.stringify({ cachedAt: Date.now(), payload }));
+  return payload;
 }
 
 function computeScores(patent, input) {
-  const remainingYears = remainingYearsFromFiling(patent.filingDate);
-  const rightsFromTerm = (remainingYears / 20) * 65;
-  const rightsFromStatus = patent.status === "登録" ? 20 : 8;
-  const rightsFromBreadth = (Number(patent.category.length % 10) / 10) * 15;
-  const rightsScore = clamp(Math.round(rightsFromTerm + rightsFromStatus + rightsFromBreadth), 0, 100);
+  const base = getCategoryBase(patent.category);
+  const metrics = patent.metrics;
+  const filingYear = new Date(patent.filingDate).getFullYear();
+  const ageFactor = clamp((new Date().getFullYear() - filingYear) / 12, 0.35, 1.2);
 
-  const sales = salesRangeMap[input.salesRange] || salesRangeMap.default;
-  const logScale = clamp(Math.log10(sales.max) - 6.5, 0, 5);
-  const marketFromSales = (logScale / 5) * 70;
-  const marketFromCategory = patent.category.includes("医療") ? 25 : 18;
-  const marketScore = clamp(Math.round(marketFromSales + marketFromCategory), 0, 100);
+  const impactCitation = percentile(metrics.citations * ageFactor, base.citations[0], base.citations[1]);
+  const impactGrowth = percentile(metrics.citationGrowth, base.growth[0], base.growth[1]);
+  const impact = Math.round(impactCitation * 0.7 + impactGrowth * 0.3);
 
-  const useScoreMap = {
-    using: 80,
-    planned: 68,
-    not_using: 55,
-    "": 50
-  };
-  const inputCompleteness = [input.useStatus, input.salesRange, input.contribution].filter(Boolean).length;
-  const tradability = clamp(useScoreMap[input.useStatus || ""] + inputCompleteness * 6, 0, 100);
+  const breadthClaims = percentile(metrics.claimCount, base.claims[0], base.claims[1]);
+  const breadthFamily = percentile(metrics.familySize, base.family[0], base.family[1]);
+  const breadth = Math.round(breadthClaims * 0.45 + breadthFamily * 0.35 + metrics.classRank * 0.2);
 
-  const total = Math.round(rightsScore * 0.4 + marketScore * 0.35 + tradability * 0.25);
+  const remain = remainingYearsFromFiling(patent.filingDate);
+  const strengthTerm = percentile(remain, 3, 20);
+  const strengthStatus = patent.status === "登録" ? 88 : 52;
+  const strengthProsecution = percentile(48 - metrics.prosecutionMonths, 6, 36);
+  const strength = Math.round(strengthTerm * 0.4 + strengthStatus * 0.3 + strengthProsecution * 0.3);
+
+  const monetizationPlayers = percentile(metrics.marketPlayers, base.players[0], base.players[1]);
+  const monetizationDensity = percentile(metrics.filingDensity, base.density[0], base.density[1]);
+  const applicantBoost = patent.applicantType === "企業" ? 10 : patent.applicantType === "大学" ? 5 : 0;
+  const monetizationRaw = monetizationPlayers * 0.45 + monetizationDensity * 0.45 + applicantBoost;
+
+  const useFactor = useStatusFactor[input.useStatus || ""];
+  const monetization = clamp(Math.round(monetizationRaw * useFactor), 0, 100);
+
+  const total = Math.round(impact * 0.3 + breadth * 0.25 + strength * 0.25 + monetization * 0.2);
 
   return {
     total,
-    rights: rightsScore,
-    market: marketScore,
-    tradability
+    rank: getRank(total),
+    impact,
+    breadth,
+    strength,
+    monetization
   };
 }
 
-function computeEstimate(patent, input, scores) {
-  const sales = salesRangeMap[input.salesRange] || salesRangeMap.default;
-  const contribution = Number(input.contribution || 0.1);
-  const royalty = categoryRoyalty[patent.category] || categoryRoyalty.default;
-
-  const remaining = remainingYearsFromFiling(patent.filingDate);
-  const years = clamp(Math.round(remaining), 3, 7);
-
-  const useRisk = input.useStatus === "not_using" ? 0.85 : 1;
-  const confidencePenalty = scores.total < 60 ? 0.85 : 1;
-
-  const lowAnnual = sales.min * royalty[0] * contribution * 0.8;
-  const highAnnual = sales.max * royalty[1] * contribution * 1.15;
-
-  const lowPv = lowAnnual * annuityFactor(0.22, years) * useRisk * confidencePenalty;
-  const highPv = highAnnual * annuityFactor(0.15, years) * useRisk;
-
-  const roundedLow = Math.round(lowPv / 10000) * 10000;
-  const roundedHigh = Math.max(roundedLow + 100000, Math.round(highPv / 10000) * 10000);
-  const mid = Math.round(((roundedLow + roundedHigh) / 2) / 10000) * 10000;
-
-  let confidence = "低";
-  if (scores.total >= 70) confidence = "高";
-  else if (scores.total >= 55) confidence = "中";
-
-  const reasons = [];
-  if (!input.salesRange) reasons.push("売上レンジ未入力のため、レンジ幅が広くなっています。");
-  if (!input.contribution) reasons.push("寄与度が未入力のため、標準値10%で計算しています。");
-  if (!input.useStatus) reasons.push("実施状況が未入力のため、取引可能性を保守的に評価しています。");
-  if (reasons.length === 0) reasons.push("主要3項目が入力されているため、推定の信頼性は相対的に高めです。");
-
-  return {
-    low: roundedLow,
-    high: roundedHigh,
-    mid,
-    confidence,
-    years,
-    reasons
-  };
+function generateComment(scores) {
+  if (scores.total >= 80) return "同分野内で優位な指標が多く、収益化打診の初動が取りやすい状態です。";
+  if (scores.total >= 65) return "主要指標は良好です。用途整理と相手企業の選定で評価を伸ばせます。";
+  if (scores.total >= 50) return "基礎評価は標準レンジです。根拠の補強で交渉力を上げられます。";
+  return "公開情報だけでは評価が割れています。詳細調査で判断材料を増やす段階です。";
 }
 
-function recommendAction(scores, input) {
-  if (input.useStatus === "using" && scores.market >= 60) {
-    return {
-      type: "license",
-      title: "ライセンス向き",
-      reasons: ["実施実績があり、導入先への説明がしやすい", "市場性スコアが高く、複数社提案に向く"]
-    };
-  }
+function generateRationales(scores) {
+  const items = [
+    { key: "impact", label: "影響度", val: scores.impact },
+    { key: "breadth", label: "権利の広さ", val: scores.breadth },
+    { key: "strength", label: "実務上の強さ", val: scores.strength },
+    { key: "monetization", label: "収益化の近さ", val: scores.monetization }
+  ];
 
-  if (input.useStatus === "not_using" && scores.rights >= 60) {
-    return {
-      type: "sale",
-      title: "売却向き",
-      reasons: ["自社未活用のため、譲渡での早期現金化と相性が良い", "権利スコアが一定以上で買い手に提示しやすい"]
-    };
-  }
-
-  if (scores.rights >= 75 && scores.market >= 70) {
-    return {
-      type: "both",
-      title: "売却 + ライセンス併用向き",
-      reasons: ["権利と市場のバランスが良く、複線で打診可能", "条件比較で期待値を最大化しやすい"]
-    };
-  }
-
-  return {
-    type: "infringement",
-    title: "侵害発見支援も検討",
-    reasons: ["追加調査で実施企業を特定すると価値が上がる可能性", "取引前に用途整理を進めると成約率が上がる"]
-  };
+  return items
+    .sort((a, b) => b.val - a.val)
+    .slice(0, 3)
+    .map((item) => {
+      if (item.val >= 75) return `${item.label}: 同分野・同年代で上位レンジ`;
+      if (item.val >= 55) return `${item.label}: 平均よりやや優位`;
+      return `${item.label}: 追加情報で評価が変動しやすい`;
+    });
 }
 
-function renderDiagnosis(diagnosis) {
-  const { patent, estimate, scores, action, input } = diagnosis;
-  const officialLabel = patent.officialUrl.includes("j-platpat") ? "J-PlatPatで確認" : "公式ソースを確認";
+function buildJoinUrl(result) {
+  const params = new URLSearchParams({
+    source: "patent-value-check",
+    patent_id: result.patent.id,
+    result_id: result.resultId
+  });
+  return `https://patent-revenue.iprich.jp/?${params.toString()}#licence`;
+}
 
-  summaryEl.innerHTML = `
-    <h3>特許要約</h3>
-    <p class="title">${patent.title}</p>
-    <p>特許番号: <strong>特許第${diagnosis.normalizedPatentNumber}号</strong></p>
-    <p>出願人: ${patent.applicant}</p>
-    <p>登録日: ${formatDate(patent.registrationDate)}</p>
-    <p>カテゴリ: ${patent.category}</p>
-    <p class="source"><a href="${patent.officialUrl}" target="_blank" rel="noopener noreferrer">${officialLabel}</a></p>
-  `;
-
-  estimateEl.innerHTML = `
-    <h3>価値レンジ（概算）</h3>
-    <p class="range">${currency(estimate.low)} 〜 ${currency(estimate.high)}</p>
-    <p>信頼度: <strong>${estimate.confidence}</strong> / 想定評価期間: ${estimate.years}年</p>
-    <ul>
-      ${estimate.reasons.map((r) => `<li>${r}</li>`).join("")}
-    </ul>
-    <p class="small">算出式(簡易): 売上 × ロイヤルティ率 × 寄与度 を割引現在価値化</p>
-  `;
+function renderResult(result) {
+  const score = result.scores;
+  const rationales = generateRationales(score);
 
   scoreEl.innerHTML = `
-    <h3>スコア（0〜100）</h3>
-    <p class="score-main">総合 ${scores.total}</p>
-    <p>権利の強さ: ${scores.rights}</p>
-    <p>市場性: ${scores.market}</p>
-    <p>取引しやすさ: ${scores.tradability}</p>
-    <p class="small">入力状態: 実施状況「${useStatusLabel[input.useStatus || ""]}」 / 売上「${(salesRangeMap[input.salesRange] || salesRangeMap.default).label}」</p>
+    <p class="score-label">Patent Value Score</p>
+    <p class="score-main">${score.total}</p>
+    <p class="rank">ランク ${score.rank}</p>
   `;
 
-  actionEl.innerHTML = `
-    <h3>次の一手</h3>
-    <p class="title">${action.title}</p>
-    <ul>
-      ${action.reasons.map((r) => `<li>${r}</li>`).join("")}
-    </ul>
-    <p class="small">登録・相談は無料、成約時に成功報酬15%（Patent Value Check想定）</p>
+  summaryEl.innerHTML = `
+    <h3>所見</h3>
+    <p class="title">${result.patent.title}</p>
+    <p>${generateComment(score)}</p>
+    <p class="small">特許ID: ${result.patent.id} / カテゴリ: ${result.patent.category}</p>
+    <p class="small"><a href="${result.patent.officialUrl}" target="_blank" rel="noopener noreferrer">J-PlatPatで確認</a></p>
   `;
+
+  reasonsEl.innerHTML = `
+    <h3>評価根拠（見出し）</h3>
+    <ul>${rationales.map((text) => `<li>${text}</li>`).join("")}</ul>
+  `;
+
+  gatedEl.innerHTML = `
+    <h3>会員向け詳細（非表示）</h3>
+    <div class="gated-list">
+      <p>・引用推移チャート</p>
+      <p>・関連企業リスト（上位20社）</p>
+      <p>・想定収益化ルート（売却/ライセンス）</p>
+      <p>・案件化優先順位</p>
+    </div>
+    <p class="small">詳細はPatentRevenue会員向け画面で確認できます。</p>
+  `;
+
+  joinLink.href = buildJoinUrl(result);
 }
 
-function fillRegisterForm(diagnosis) {
-  const { patent, estimate, action, normalizedPatentNumber } = diagnosis;
-
-  document.getElementById("reg-patent-number").value = `特許第${normalizedPatentNumber}号`;
-  document.getElementById("reg-title").value = patent.title;
-  document.getElementById("reg-category").value = patent.category;
-  document.getElementById("reg-support").value = supportMap[action.type] || "both";
-  document.getElementById("reg-price").value = estimate.mid;
-  document.getElementById("reg-note").value = `診断結果: ${currency(estimate.low)}〜${currency(estimate.high)} / 信頼度 ${estimate.confidence}`;
-
-  const buttons = document.querySelectorAll("[data-price-preset]");
-  buttons.forEach((btn) => {
-    btn.onclick = () => {
-      const preset = btn.getAttribute("data-price-preset");
-      const priceInput = document.getElementById("reg-price");
-      if (preset === "low") priceInput.value = estimate.low;
-      if (preset === "mid") priceInput.value = estimate.mid;
-      if (preset === "high") priceInput.value = estimate.high;
-    };
-  });
+function showResultScreen() {
+  screenInput.classList.add("hidden");
+  screenResult.classList.remove("hidden");
+  screenResult.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function show(screen) {
-  [screenInput, screenResult, screenRegister].forEach((node) => node.classList.add("hidden"));
-  screen.classList.remove("hidden");
+function showInputScreen() {
+  screenResult.classList.add("hidden");
+  screenInput.classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -326,16 +311,14 @@ diagnosisForm.addEventListener("submit", async (event) => {
 
   const fd = new FormData(diagnosisForm);
   const input = {
-    patentNumber: String(fd.get("patentNumber") || "").trim(),
+    query: String(fd.get("query") || "").trim(),
     useStatus: String(fd.get("useStatus") || ""),
     salesRange: String(fd.get("salesRange") || ""),
     contribution: String(fd.get("contribution") || "")
   };
 
-  const normalizedPatentNumber = normalizePatentNumber(input.patentNumber);
-
-  if (normalizedPatentNumber.length < 6) {
-    window.alert("特許番号は6桁以上で入力してください（例: 特許第7091234号）");
+  if (!input.query) {
+    window.alert("特許番号・公開番号・キーワードを入力してください。");
     return;
   }
 
@@ -344,54 +327,61 @@ diagnosisForm.addEventListener("submit", async (event) => {
   submitButton.disabled = true;
   submitButton.textContent = "診断中...";
 
-  try {
-    const patent = await fetchPatentInfo(normalizedPatentNumber);
-    const scores = computeScores(patent, input);
-    const estimate = computeEstimate(patent, input, scores);
-    const action = recommendAction(scores, input);
+  trackEvent("diagnosis_start", {
+    query_type: normalizePatentNumber(input.query).length >= 6 ? "number" : "keyword"
+  });
 
-    latestDiagnosis = {
+  try {
+    const patent = await fetchPatentInfo(input.query);
+    const scores = computeScores(patent, input);
+
+    latestResult = {
+      resultId: resultId(),
       input,
-      normalizedPatentNumber,
       patent,
-      scores,
-      estimate,
-      action
+      scores
     };
 
-    renderDiagnosis(latestDiagnosis);
-    show(screenResult);
+    renderResult(latestResult);
+    showResultScreen();
+
+    trackEvent("diagnosis_success", {
+      result_id: latestResult.resultId,
+      patent_id: patent.id,
+      score: scores.total,
+      rank: scores.rank
+    });
   } catch (error) {
     console.error(error);
-    window.alert("診断中にエラーが発生しました。時間をおいて再度お試しください。");
+    window.alert("診断に失敗しました。時間をおいて再度お試しください。");
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = originalText;
   }
 });
 
-backToInputBtn.addEventListener("click", () => {
-  show(screenInput);
+joinLink.addEventListener("click", () => {
+  if (!latestResult) return;
+  trackEvent("cta_click_join_patentrevenue", {
+    result_id: latestResult.resultId,
+    patent_id: latestResult.patent.id
+  });
+  trackEvent("signup_start", {
+    result_id: latestResult.resultId,
+    patent_id: latestResult.patent.id
+  });
 });
 
-toRegisterBtn.addEventListener("click", () => {
-  if (!latestDiagnosis) return;
-  fillRegisterForm(latestDiagnosis);
-  registerResultEl.classList.add("hidden");
-  show(screenRegister);
+reportSignupBtn.addEventListener("click", () => {
+  if (!latestResult) return;
+  trackEvent("signup_complete", {
+    result_id: latestResult.resultId,
+    patent_id: latestResult.patent.id,
+    source: "demo-report"
+  });
+  window.alert("signup_complete を記録しました（デモ）。");
 });
 
-registerForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const fd = new FormData(registerForm);
-  const payload = Object.fromEntries(fd.entries());
+backToInputBtn.addEventListener("click", showInputScreen);
 
-  registerResultEl.classList.remove("hidden");
-  registerResultEl.innerHTML = `
-    <h3>仮登録を受け付けました（デモ）</h3>
-    <p>実運用ではこの内容を連携先の登録API/フォームへ送信します。</p>
-    <pre>${JSON.stringify(payload, null, 2)}</pre>
-  `;
-
-  registerResultEl.scrollIntoView({ behavior: "smooth", block: "center" });
-});
+trackEvent("lp_view", { page: "home" });
