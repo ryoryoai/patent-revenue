@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>60秒 特許価値診断 | PatentRevenue MVP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow bg-glow-a"></div>
+    <div class="bg-glow bg-glow-b"></div>
+    <main class="container">
+      <header class="hero">
+        <p class="eyebrow">PatentRevenue Hook MVP</p>
+        <h1>60秒 特許価値診断</h1>
+        <p class="lead">特許番号を入れるだけで、価値レンジと次の一手を提示。結果をそのまま登録フォームへ引き継げます。</p>
+        <div class="badges">
+          <span>国内特許のみ対応</span>
+          <span>概算レンジ表示</span>
+          <span>登録・相談無料 / 成約時15%</span>
+        </div>
+      </header>
+
+      <section id="screen-input" class="panel">
+        <h2>1. 特許番号を入力</h2>
+        <form id="diagnosis-form" class="form-grid">
+          <label>
+            特許番号
+            <input
+              id="patent-number"
+              name="patentNumber"
+              type="text"
+              placeholder="例: 特許第7091234号"
+              required
+            />
+          </label>
+
+          <label>
+            実施状況（任意）
+            <select id="use-status" name="useStatus">
+              <option value="">未選択</option>
+              <option value="using">現在使っている</option>
+              <option value="planned">これから使う予定</option>
+              <option value="not_using">使っていない</option>
+            </select>
+          </label>
+
+          <label>
+            対象の年間売上レンジ（任意）
+            <select id="sales-range" name="salesRange">
+              <option value="">未選択</option>
+              <option value="lt100m">〜1億円</option>
+              <option value="100m_1b">1億円〜10億円</option>
+              <option value="1b_10b">10億円〜100億円</option>
+              <option value="gt10b">100億円以上</option>
+            </select>
+          </label>
+
+          <label>
+            特許の寄与度（任意）
+            <select id="contribution" name="contribution">
+              <option value="">未選択</option>
+              <option value="0.05">5%</option>
+              <option value="0.10">10%</option>
+              <option value="0.20">20%</option>
+              <option value="0.30">30%以上</option>
+            </select>
+          </label>
+
+          <button type="submit" class="btn btn-primary">診断する（無料）</button>
+        </form>
+      </section>
+
+      <section id="screen-result" class="panel hidden">
+        <h2>2. 診断結果</h2>
+
+        <div class="result-grid">
+          <article class="card" id="patent-summary"></article>
+          <article class="card accent" id="value-estimate"></article>
+        </div>
+
+        <div class="result-grid">
+          <article class="card" id="score-breakdown"></article>
+          <article class="card" id="next-action"></article>
+        </div>
+
+        <div class="cta-row">
+          <button id="to-register" class="btn btn-primary">この内容で登録フォームへ（入力済み）</button>
+          <button id="back-to-input" class="btn btn-ghost">入力を修正する</button>
+        </div>
+      </section>
+
+      <section id="screen-register" class="panel hidden">
+        <h2>3. 登録フォーム（診断内容を反映済み）</h2>
+
+        <form id="register-form" class="form-grid">
+          <label>
+            会社名
+            <input id="company-name" name="companyName" type="text" placeholder="株式会社◯◯" required />
+          </label>
+
+          <label>
+            担当者名
+            <input id="contact-name" name="contactName" type="text" placeholder="山田 太郎" required />
+          </label>
+
+          <label>
+            メール
+            <input id="email" name="email" type="email" placeholder="name@example.com" required />
+          </label>
+
+          <label>
+            特許番号
+            <input id="reg-patent-number" name="patentNumber" type="text" readonly />
+          </label>
+
+          <label>
+            特許タイトル
+            <input id="reg-title" name="title" type="text" />
+          </label>
+
+          <label>
+            技術カテゴリ
+            <input id="reg-category" name="category" type="text" />
+          </label>
+
+          <label>
+            支援方法
+            <select id="reg-support" name="supportMethod">
+              <option value="license">ライセンス希望</option>
+              <option value="sale">売却希望</option>
+              <option value="both">売却 + ライセンス</option>
+              <option value="infringement">侵害発見支援</option>
+            </select>
+          </label>
+
+          <label>
+            おすすめ希望金額
+            <input id="reg-price" name="targetPrice" type="number" step="10000" min="0" />
+          </label>
+
+          <div class="price-presets">
+            <button type="button" class="btn btn-mini" data-price-preset="low">下限を使う</button>
+            <button type="button" class="btn btn-mini" data-price-preset="mid">中央値を使う</button>
+            <button type="button" class="btn btn-mini" data-price-preset="high">上限を使う</button>
+          </div>
+
+          <label class="full">
+            概要メモ
+            <textarea id="reg-note" name="note" rows="4"></textarea>
+          </label>
+
+          <button type="submit" class="btn btn-primary">この内容で仮登録する（デモ）</button>
+        </form>
+
+        <div id="register-result" class="submit-result hidden"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
