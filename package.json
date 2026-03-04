@@ -2,7 +2,7 @@
   "name": "patent-revenue-mvp",
   "version": "0.1.0",
   "private": true,
-  "description": "PatentRevenue hook MVP: patent number diagnosis to prefilled registration",
+  "description": "Patent Value Check mock: patent number diagnosis to prefilled registration",
   "scripts": {
     "start": "node server.js"
   }

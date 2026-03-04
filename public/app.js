@@ -114,7 +114,7 @@ function pseudoPatent(number) {
 
   return {
     title: `特許第${number}号（自動取得サンプル）`,
-    applicant: "取得元未連携（MVP）",
+    applicant: "取得元未連携（モック）",
     registrationDate: `${filingYear + 2}-${filingMonth}-${filingDay}`,
     filingDate: `${filingYear}-${filingMonth}-${filingDay}`,
     category,
@@ -289,7 +289,7 @@ function renderDiagnosis(diagnosis) {
     <ul>
       ${action.reasons.map((r) => `<li>${r}</li>`).join("")}
     </ul>
-    <p class="small">登録・相談は無料、成約時に成功報酬15%（PatentRevenue想定）</p>
+    <p class="small">登録・相談は無料、成約時に成功報酬15%（Patent Value Check想定）</p>
   `;
 }
 
@@ -389,7 +389,7 @@ registerForm.addEventListener("submit", (event) => {
   registerResultEl.classList.remove("hidden");
   registerResultEl.innerHTML = `
     <h3>仮登録を受け付けました（デモ）</h3>
-    <p>実運用ではこの内容をPatentRevenueの登録API/フォームへ送信します。</p>
+    <p>実運用ではこの内容を連携先の登録API/フォームへ送信します。</p>
     <pre>${JSON.stringify(payload, null, 2)}</pre>
   `;
 

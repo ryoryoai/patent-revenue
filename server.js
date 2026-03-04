@@ -43,5 +43,5 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, () => {
-  console.log(`PatentRevenue MVP running at http://localhost:${port}`);
+  console.log(`Patent Value Check running at http://localhost:${port}`);
 });
