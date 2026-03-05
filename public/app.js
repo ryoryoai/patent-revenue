@@ -121,9 +121,26 @@ const diagnoseBtn = document.getElementById("diagnose-btn");
 const resultLead = document.getElementById("result-lead");
 const ctaNote = document.getElementById("cta-note");
 const cautionText = document.getElementById("caution-text");
+const systemMessage = document.getElementById("system-message");
 
 let latestResult = null;
 let currentVariant = "current";
+
+function showSystemMessage(message, tone = "warn") {
+  if (!systemMessage) return;
+  systemMessage.classList.remove("hidden", "warn", "error");
+  if (tone === "warn" || tone === "error") {
+    systemMessage.classList.add(tone);
+  }
+  systemMessage.textContent = message;
+}
+
+function clearSystemMessage() {
+  if (!systemMessage) return;
+  systemMessage.classList.add("hidden");
+  systemMessage.classList.remove("warn", "error");
+  systemMessage.textContent = "";
+}
 
 function trackEvent(name, payload = {}) {
   window.dataLayer = window.dataLayer || [];
@@ -221,7 +238,7 @@ function pseudoPatentFromQuery(query, number) {
   };
 }
 
-async function fetchPatentInfo(query) {
+async function fetchPatentInfoFallback(query) {
   const patentNumber = normalizePatentNumber(query);
   const cacheKey = `pvc_cache_${patentNumber || query}`;
   const cached = localStorage.getItem(cacheKey);
@@ -240,7 +257,49 @@ async function fetchPatentInfo(query) {
   await new Promise((resolve) => setTimeout(resolve, 350));
   const payload = patentNumber.length >= 6 ? mockPatents[patentNumber] || pseudoPatentFromQuery(query, patentNumber) : pseudoPatentFromQuery(query, "");
   localStorage.setItem(cacheKey, JSON.stringify({ cachedAt: Date.now(), payload }));
-  return payload;
+  return {
+    patent: payload,
+    meta: {
+      mode: "client-fallback",
+      cacheHit: false
+    }
+  };
+}
+
+async function fetchPatentInfo(query) {
+  const body = JSON.stringify({ query });
+  let response;
+
+  try {
+    response = await fetch("/api/diagnose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body
+    });
+  } catch (error) {
+    return fetchPatentInfoFallback(query);
+  }
+
+  if (response.ok) {
+    return response.json();
+  }
+
+  if (response.status === 404 || response.status === 405) {
+    return fetchPatentInfoFallback(query);
+  }
+
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch (error) {
+    payload = {};
+  }
+
+  const limitError = new Error(payload.message || "診断APIでエラーが発生しました。");
+  limitError.status = response.status;
+  limitError.payload = payload;
+  throw limitError;
 }
 
 function computeScores(patent, input) {
@@ -333,6 +392,7 @@ function renderResult(result) {
     <p class="title">${result.patent.title}</p>
     <p>${generateComment(score)}</p>
     <p class="small">特許ID: ${result.patent.id} / カテゴリ: ${result.patent.category}</p>
+    <p class="small">応答: ${result.meta?.mode || "api"} / キャッシュ: ${result.meta?.cacheHit ? "hit" : "miss"}</p>
     <p class="small"><a href="${result.patent.officialUrl}" target="_blank" rel="noopener noreferrer">J-PlatPatで確認</a></p>
   `;
 
@@ -408,9 +468,10 @@ diagnosisForm.addEventListener("submit", async (event) => {
   };
 
   if (!input.query) {
-    window.alert("特許番号・公開番号・キーワードを入力してください。");
+    showSystemMessage("特許番号・公開番号・キーワードを入力してください。", "warn");
     return;
   }
+  clearSystemMessage();
 
   const submitButton = diagnosisForm.querySelector("button[type='submit']");
   const originalText = submitButton.textContent;
@@ -422,14 +483,16 @@ diagnosisForm.addEventListener("submit", async (event) => {
   });
 
   try {
-    const patent = await fetchPatentInfo(input.query);
+    const diagnosis = await fetchPatentInfo(input.query);
+    const patent = diagnosis.patent;
     const scores = computeScores(patent, input);
 
     latestResult = {
-      resultId: resultId(),
+      resultId: diagnosis.resultId || resultId(),
       input,
       patent,
-      scores
+      scores,
+      meta: diagnosis.meta || {}
     };
 
     renderResult(latestResult);
@@ -443,7 +506,17 @@ diagnosisForm.addEventListener("submit", async (event) => {
     });
   } catch (error) {
     console.error(error);
-    window.alert("診断に失敗しました。時間をおいて再度お試しください。");
+    if (error.status === 429) {
+      const waitHint = error.payload?.retryAfterSeconds ? `約${error.payload.retryAfterSeconds}秒後` : "時間をおいて";
+      showSystemMessage(`上限に達しました。${waitHint}に再試行してください。詳細分析はPatentRevenue登録で継続できます。`, "warn");
+      trackEvent("diagnosis_limited", {
+        reason: error.payload?.reason || "rate_limited"
+      });
+    } else if (error.status === 503) {
+      showSystemMessage("現在アクセスが集中しています。キャッシュ結果のみ提供中です。しばらくして再試行してください。", "warn");
+    } else {
+      showSystemMessage("診断に失敗しました。時間をおいて再度お試しください。", "error");
+    }
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = originalText;
