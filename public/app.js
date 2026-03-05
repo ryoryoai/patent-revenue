@@ -122,9 +122,15 @@ const resultLead = document.getElementById("result-lead");
 const ctaNote = document.getElementById("cta-note");
 const cautionText = document.getElementById("caution-text");
 const systemMessage = document.getElementById("system-message");
+const captchaBox = document.getElementById("captcha-box");
+const captchaWidget = document.getElementById("captcha-widget");
 
 let latestResult = null;
 let currentVariant = "current";
+let captchaToken = "";
+let captchaSiteKey = "";
+let turnstileWidgetId = null;
+let turnstileLoader = null;
 
 function showSystemMessage(message, tone = "warn") {
   if (!systemMessage) return;
@@ -140,6 +146,54 @@ function clearSystemMessage() {
   systemMessage.classList.add("hidden");
   systemMessage.classList.remove("warn", "error");
   systemMessage.textContent = "";
+}
+
+function ensureTurnstileScript() {
+  if (window.turnstile) return Promise.resolve();
+  if (turnstileLoader) return turnstileLoader;
+
+  turnstileLoader = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("turnstile_load_failed"));
+    document.head.appendChild(script);
+  });
+
+  return turnstileLoader;
+}
+
+function hideCaptchaChallenge() {
+  if (!captchaBox) return;
+  captchaBox.classList.add("hidden");
+}
+
+async function showCaptchaChallenge(siteKey) {
+  if (!captchaBox || !captchaWidget || !siteKey) return;
+  captchaBox.classList.remove("hidden");
+
+  try {
+    await ensureTurnstileScript();
+  } catch (error) {
+    showSystemMessage("CAPTCHAの読み込みに失敗しました。時間をおいて再試行してください。", "warn");
+    return;
+  }
+
+  captchaSiteKey = siteKey;
+  captchaWidget.innerHTML = "";
+  turnstileWidgetId = window.turnstile.render(captchaWidget, {
+    sitekey: siteKey,
+    theme: "light",
+    callback: (token) => {
+      captchaToken = token;
+      showSystemMessage("追加認証が完了しました。もう一度診断を実行してください。", "warn");
+    },
+    "expired-callback": () => {
+      captchaToken = "";
+    }
+  });
 }
 
 function trackEvent(name, payload = {}) {
@@ -266,8 +320,8 @@ async function fetchPatentInfoFallback(query) {
   };
 }
 
-async function fetchPatentInfo(query) {
-  const body = JSON.stringify({ query });
+async function fetchPatentInfo(query, challengeToken = "") {
+  const body = JSON.stringify({ query, captchaToken: challengeToken || undefined });
   let response;
 
   try {
@@ -483,7 +537,12 @@ diagnosisForm.addEventListener("submit", async (event) => {
   });
 
   try {
-    const diagnosis = await fetchPatentInfo(input.query);
+    const diagnosis = await fetchPatentInfo(input.query, captchaToken);
+    captchaToken = "";
+    if (turnstileWidgetId !== null && window.turnstile) {
+      window.turnstile.reset(turnstileWidgetId);
+    }
+    hideCaptchaChallenge();
     const patent = diagnosis.patent;
     const scores = computeScores(patent, input);
 
@@ -507,13 +566,21 @@ diagnosisForm.addEventListener("submit", async (event) => {
   } catch (error) {
     console.error(error);
     if (error.status === 429) {
-      const waitHint = error.payload?.retryAfterSeconds ? `約${error.payload.retryAfterSeconds}秒後` : "時間をおいて";
-      showSystemMessage(`上限に達しました。${waitHint}に再試行してください。詳細分析はPatentRevenue登録で継続できます。`, "warn");
+      if (error.payload?.reason === "captcha_required") {
+        showSystemMessage("アクセス保護のため追加認証が必要です。CAPTCHAを完了後、再度診断してください。", "warn");
+        trackEvent("captcha_required", { reason: error.payload?.reason });
+        await showCaptchaChallenge(error.payload?.captchaSiteKey || captchaSiteKey);
+      } else {
+        const waitHint = error.payload?.retryAfterSeconds ? `約${error.payload.retryAfterSeconds}秒後` : "時間をおいて";
+        showSystemMessage(`上限に達しました。${waitHint}に再試行してください。詳細分析はPatentRevenue登録で継続できます。`, "warn");
+      }
       trackEvent("diagnosis_limited", {
         reason: error.payload?.reason || "rate_limited"
       });
     } else if (error.status === 503) {
       showSystemMessage("現在アクセスが集中しています。キャッシュ結果のみ提供中です。しばらくして再試行してください。", "warn");
+    } else if (error.status === 403) {
+      showSystemMessage("アクセス元が制限されています。ネットワーク管理者にお問い合わせください。", "error");
     } else {
       showSystemMessage("診断に失敗しました。時間をおいて再度お試しください。", "error");
     }

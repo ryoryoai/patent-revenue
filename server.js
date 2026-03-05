@@ -1,4 +1,5 @@
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -16,6 +17,14 @@ const GLOBAL_DAY_LIMIT = Number(process.env.GLOBAL_DAY_LIMIT || 3_000);
 const GLOBAL_HOUR_LIMIT = Number(process.env.GLOBAL_HOUR_LIMIT || 500);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 4_500);
 const HASH_SECRET = process.env.HASH_SECRET || "pvc-dev-secret";
+
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
+const CAPTCHA_REQUIRED_TTL_MS = Number(process.env.CAPTCHA_REQUIRED_TTL_MS || 10 * 60_000);
+
+const EDGE_SHARED_SECRET = process.env.EDGE_SHARED_SECRET || "";
+const METRICS_API_KEY = process.env.METRICS_API_KEY || "dev-metrics-key";
+const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -75,6 +84,25 @@ const globalBudget = {
   dayCount: 0,
   hourResetAt: nextHour(),
   hourCount: 0
+};
+
+const metrics = {
+  diagnoseRequests: 0,
+  diagnoseAllowed: 0,
+  diagnoseBlocked: 0,
+  blockedByReason: {},
+  cacheHit: 0,
+  cacheMiss: 0,
+  upstreamCalls: 0,
+  errors4xx: 0,
+  errors5xx: 0,
+  latencyMsSamples: []
+};
+
+const alertState = {
+  hour80Sent: false,
+  day80Sent: false,
+  highLatencyAlertAt: 0
 };
 
 function nextHour() {
@@ -194,7 +222,10 @@ function getUserState(identifier) {
       dayResetAt: nextJstMidnight(),
       lastRequestAt: 0,
       minuteHits: [],
-      cooldownUntil: 0
+      cooldownUntil: 0,
+      violationCount: 0,
+      lastViolationAt: 0,
+      captchaRequiredUntil: 0
     };
     userLimitStore.set(identifier, state);
   }
@@ -204,13 +235,36 @@ function getUserState(identifier) {
     state.dayResetAt = nextJstMidnight();
   }
 
+  if (now - state.lastViolationAt > 15 * 60_000) {
+    state.violationCount = 0;
+  }
+
   state.minuteHits = state.minuteHits.filter((ts) => now - ts < 60_000);
   return state;
 }
 
-function checkAndConsumeUserQuota(identifier) {
+function markViolation(state, now) {
+  state.violationCount += 1;
+  state.lastViolationAt = now;
+}
+
+function checkAndConsumeUserQuota(identifier, captchaPassed) {
   const now = Date.now();
   const state = getUserState(identifier);
+
+  if (captchaPassed) {
+    state.captchaRequiredUntil = 0;
+    state.violationCount = Math.max(state.violationCount - 2, 0);
+  }
+
+  if (now < state.captchaRequiredUntil && !captchaPassed) {
+    return {
+      ok: false,
+      reason: "captcha_required",
+      retryAfterSeconds: Math.ceil((state.captchaRequiredUntil - now) / 1000),
+      challenge: true
+    };
+  }
 
   if (now < state.cooldownUntil) {
     return {
@@ -222,6 +276,16 @@ function checkAndConsumeUserQuota(identifier) {
 
   const delta = now - state.lastRequestAt;
   if (state.lastRequestAt > 0 && delta < BURST_INTERVAL_MS) {
+    markViolation(state, now);
+    if (TURNSTILE_SITE_KEY && state.violationCount >= 2) {
+      state.captchaRequiredUntil = now + CAPTCHA_REQUIRED_TTL_MS;
+      return {
+        ok: false,
+        reason: "captcha_required",
+        retryAfterSeconds: Math.ceil(CAPTCHA_REQUIRED_TTL_MS / 1000),
+        challenge: true
+      };
+    }
     return {
       ok: false,
       reason: "burst_interval",
@@ -230,7 +294,17 @@ function checkAndConsumeUserQuota(identifier) {
   }
 
   if (state.minuteHits.length >= PER_MIN_LIMIT) {
+    markViolation(state, now);
     state.cooldownUntil = now + COOLDOWN_MS;
+    if (TURNSTILE_SITE_KEY) {
+      state.captchaRequiredUntil = now + CAPTCHA_REQUIRED_TTL_MS;
+      return {
+        ok: false,
+        reason: "captcha_required",
+        retryAfterSeconds: Math.ceil(CAPTCHA_REQUIRED_TTL_MS / 1000),
+        challenge: true
+      };
+    }
     return {
       ok: false,
       reason: "burst_per_minute",
@@ -249,6 +323,7 @@ function checkAndConsumeUserQuota(identifier) {
   state.dayCount += 1;
   state.lastRequestAt = now;
   state.minuteHits.push(now);
+  state.violationCount = Math.max(state.violationCount - 1, 0);
 
   return {
     ok: true,
@@ -259,17 +334,76 @@ function checkAndConsumeUserQuota(identifier) {
   };
 }
 
+function maybeSendAlert(type, payload) {
+  const message = {
+    at: new Date().toISOString(),
+    service: "patent-value-check",
+    type,
+    ...payload
+  };
+
+  if (!ALERT_WEBHOOK_URL) {
+    console.warn("[alert]", JSON.stringify(message));
+    return;
+  }
+
+  const endpoint = new URL(ALERT_WEBHOOK_URL);
+  const data = JSON.stringify(message);
+  const client = endpoint.protocol === "https:" ? https : http;
+  const req = client.request(
+    {
+      method: "POST",
+      hostname: endpoint.hostname,
+      port: endpoint.port || (endpoint.protocol === "https:" ? 443 : 80),
+      path: `${endpoint.pathname}${endpoint.search}`,
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(data)
+      }
+    },
+    (res) => {
+      res.resume();
+    }
+  );
+  req.on("error", (error) => console.warn("alert_send_failed", error.message));
+  req.write(data);
+  req.end();
+}
+
+function p95(samples) {
+  if (samples.length === 0) return 0;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1);
+  return sorted[idx];
+}
+
+function recordLatency(ms) {
+  metrics.latencyMsSamples.push(ms);
+  if (metrics.latencyMsSamples.length > 500) {
+    metrics.latencyMsSamples.shift();
+  }
+
+  const now = Date.now();
+  const latencyP95 = p95(metrics.latencyMsSamples);
+  if (latencyP95 > 3000 && now - alertState.highLatencyAlertAt > 15 * 60_000) {
+    alertState.highLatencyAlertAt = now;
+    maybeSendAlert("latency_p95_high", { latencyP95Ms: latencyP95 });
+  }
+}
+
 function checkAndConsumeGlobalBudget() {
   const now = Date.now();
 
   if (now >= globalBudget.dayResetAt) {
     globalBudget.dayCount = 0;
     globalBudget.dayResetAt = nextJstMidnight();
+    alertState.day80Sent = false;
   }
 
   if (now >= globalBudget.hourResetAt) {
     globalBudget.hourCount = 0;
     globalBudget.hourResetAt = nextHour();
+    alertState.hour80Sent = false;
   }
 
   if (globalBudget.dayCount >= GLOBAL_DAY_LIMIT || globalBudget.hourCount >= GLOBAL_HOUR_LIMIT) {
@@ -282,6 +416,20 @@ function checkAndConsumeGlobalBudget() {
 
   globalBudget.dayCount += 1;
   globalBudget.hourCount += 1;
+
+  const hourRate = globalBudget.hourCount / GLOBAL_HOUR_LIMIT;
+  const dayRate = globalBudget.dayCount / GLOBAL_DAY_LIMIT;
+
+  if (hourRate >= 0.8 && !alertState.hour80Sent) {
+    alertState.hour80Sent = true;
+    maybeSendAlert("budget_hour_80", { usage: globalBudget.hourCount, limit: GLOBAL_HOUR_LIMIT });
+  }
+
+  if (dayRate >= 0.8 && !alertState.day80Sent) {
+    alertState.day80Sent = true;
+    maybeSendAlert("budget_day_80", { usage: globalBudget.dayCount, limit: GLOBAL_DAY_LIMIT });
+  }
+
   return {
     ok: true,
     dayRemaining: Math.max(GLOBAL_DAY_LIMIT - globalBudget.dayCount, 0),
@@ -295,12 +443,11 @@ function isAllowedOrigin(req) {
 
   const host = req.headers.host || "";
   if (origin.includes(host)) return true;
-
   if (origin === "https://ryoryoai.github.io") return true;
   return false;
 }
 
-function applySecurityHeaders(res, requestId) {
+function applySecurityHeaders(req, res, requestId) {
   res.setHeader("X-Request-Id", requestId);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -308,11 +455,27 @@ function applySecurityHeaders(res, requestId) {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   );
+
+  if (req.headers["x-forwarded-proto"] === "https" || req.socket.encrypted) {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+  }
 }
 
-function sendJson(res, status, payload) {
+function applyApiCors(req, res) {
+  const origin = req.headers.origin;
+  if (origin && isAllowedOrigin(req)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+  }
+}
+
+function sendJson(req, res, status, payload) {
+  if (req.url && req.url.startsWith("/api/")) {
+    applyApiCors(req, res);
+  }
+
   const body = JSON.stringify(payload);
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
@@ -342,7 +505,6 @@ function readJsonBody(req, limitBytes) {
       raw += chunk;
       if (Buffer.byteLength(raw) > limitBytes) {
         reject(new Error("payload_too_large"));
-        req.destroy();
       }
     });
 
@@ -354,9 +516,7 @@ function readJsonBody(req, limitBytes) {
       }
     });
 
-    req.on("error", () => {
-      reject(new Error("read_error"));
-    });
+    req.on("error", () => reject(new Error("read_error")));
   });
 }
 
@@ -370,12 +530,43 @@ function validateQuery(query) {
 
 function lookupPatent(query) {
   const patentNumber = normalizePatentNumber(query);
+  metrics.upstreamCalls += 1;
   return new Promise((resolve) => {
     setTimeout(() => {
       const patent = patentNumber.length >= 6 ? mockPatents[patentNumber] || pseudoPatentFromQuery(query, patentNumber) : pseudoPatentFromQuery(query, "");
       resolve(patent);
     }, 250);
   });
+}
+
+async function verifyTurnstileToken(token, clientIp) {
+  if (!TURNSTILE_SECRET_KEY) return false;
+  if (!token) return false;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const body = new URLSearchParams({
+      secret: TURNSTILE_SECRET_KEY,
+      response: token,
+      remoteip: clientIp
+    });
+
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body,
+      signal: controller.signal
+    });
+
+    if (!response.ok) return false;
+    const result = await response.json();
+    return Boolean(result.success);
+  } catch (error) {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function getDiagnosis(query, requestId) {
@@ -385,6 +576,7 @@ async function getDiagnosis(query, requestId) {
   const now = Date.now();
 
   if (cached && cached.expiresAt > now) {
+    metrics.cacheHit += 1;
     return {
       resultId: `cache_${hashValue(cacheKey).slice(0, 10)}`,
       patent: cached.patent,
@@ -396,14 +588,14 @@ async function getDiagnosis(query, requestId) {
     };
   }
 
-  if (!cached || cached.expiresAt <= now) {
-    const budget = checkAndConsumeGlobalBudget();
-    if (!budget.ok) {
-      const error = new Error("global_budget_exceeded");
-      error.code = "global_budget_exceeded";
-      throw error;
-    }
+  const budget = checkAndConsumeGlobalBudget();
+  if (!budget.ok) {
+    const error = new Error("global_budget_exceeded");
+    error.code = "global_budget_exceeded";
+    throw error;
   }
+
+  metrics.cacheMiss += 1;
 
   let runner = inFlight.get(cacheKey);
   if (!runner) {
@@ -437,36 +629,72 @@ async function getDiagnosis(query, requestId) {
   };
 }
 
+function incrementBlockedReason(reason) {
+  metrics.blockedByReason[reason] = (metrics.blockedByReason[reason] || 0) + 1;
+}
+
 function logRequest(info) {
-  const line = JSON.stringify({
-    at: new Date().toISOString(),
-    ...info
-  });
-  console.log(line);
+  console.log(
+    JSON.stringify({
+      at: new Date().toISOString(),
+      ...info
+    })
+  );
 }
 
 const server = http.createServer(async (req, res) => {
   const requestId = crypto.randomUUID();
-  applySecurityHeaders(res, requestId);
+  const startedAt = Date.now();
+  applySecurityHeaders(req, res, requestId);
 
   if (req.url && req.url.startsWith("/api/")) {
     if (!isAllowedOrigin(req)) {
-      sendJson(res, 403, { requestId, message: "forbidden origin" });
+      metrics.errors4xx += 1;
+      sendJson(req, res, 403, { requestId, message: "forbidden origin" });
+      return;
+    }
+
+    if (EDGE_SHARED_SECRET && req.headers["x-edge-auth"] !== EDGE_SHARED_SECRET) {
+      metrics.errors4xx += 1;
+      sendJson(req, res, 403, { requestId, message: "edge auth required" });
       return;
     }
 
     if (req.method === "OPTIONS") {
+      applyApiCors(req, res);
       res.writeHead(204, {
-        "Access-Control-Allow-Origin": req.headers.origin || "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type"
+        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, X-Metrics-Key"
       });
       res.end();
       return;
     }
   }
 
+  if (req.method === "GET" && req.url === "/api/metrics") {
+    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+      metrics.errors4xx += 1;
+      sendJson(req, res, 403, { requestId, message: "forbidden" });
+      return;
+    }
+
+    sendJson(req, res, 200, {
+      requestId,
+      metrics: {
+        ...metrics,
+        latencyP95Ms: p95(metrics.latencyMsSamples)
+      },
+      budget: {
+        hour: { used: globalBudget.hourCount, limit: GLOBAL_HOUR_LIMIT, resetAt: new Date(globalBudget.hourResetAt).toISOString() },
+        day: { used: globalBudget.dayCount, limit: GLOBAL_DAY_LIMIT, resetAt: new Date(globalBudget.dayResetAt).toISOString() }
+      }
+    });
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/api/diagnose") {
+    metrics.diagnoseRequests += 1;
+
     const clientIp = extractClientIp(req);
     const visitorId = ensureVisitorCookie(req, res);
     const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
@@ -475,22 +703,42 @@ const server = http.createServer(async (req, res) => {
     try {
       body = await readJsonBody(req, BODY_LIMIT_BYTES);
     } catch (error) {
+      metrics.errors4xx += 1;
       if (error.message === "payload_too_large") {
-        sendJson(res, 413, { requestId, message: "payload too large" });
-        return;
+        sendJson(req, res, 413, { requestId, message: "payload too large" });
+      } else {
+        sendJson(req, res, 400, { requestId, message: "invalid request body" });
       }
-      sendJson(res, 400, { requestId, message: "invalid request body" });
       return;
     }
 
     const validated = validateQuery(body.query);
     if (!validated.ok) {
-      sendJson(res, 400, { requestId, message: validated.message });
+      metrics.errors4xx += 1;
+      sendJson(req, res, 400, { requestId, message: validated.message });
       return;
     }
 
-    const quota = checkAndConsumeUserQuota(userKey);
+    const captchaPassed = body.captchaToken ? await verifyTurnstileToken(String(body.captchaToken), clientIp) : false;
+    const quota = checkAndConsumeUserQuota(userKey, captchaPassed);
+
     if (!quota.ok) {
+      metrics.diagnoseBlocked += 1;
+      metrics.errors4xx += 1;
+      incrementBlockedReason(quota.reason);
+
+      const response = {
+        requestId,
+        reason: quota.reason,
+        retryAfterSeconds: quota.retryAfterSeconds,
+        message: "quota exceeded"
+      };
+
+      if (quota.challenge && TURNSTILE_SITE_KEY) {
+        response.captchaSiteKey = TURNSTILE_SITE_KEY;
+      }
+
+      sendJson(req, res, 429, response);
       logRequest({
         requestId,
         type: "quota_block",
@@ -498,18 +746,14 @@ const server = http.createServer(async (req, res) => {
         user: userKey,
         ipHash: hashValue(normalizeIpForId(clientIp))
       });
-      sendJson(res, 429, {
-        requestId,
-        reason: quota.reason,
-        retryAfterSeconds: quota.retryAfterSeconds,
-        message: "quota exceeded"
-      });
+      recordLatency(Date.now() - startedAt);
       return;
     }
 
     try {
       const diagnosis = await getDiagnosis(validated.text, requestId);
-      sendJson(res, 200, {
+      metrics.diagnoseAllowed += 1;
+      sendJson(req, res, 200, {
         requestId,
         ...diagnosis,
         quota: quota.quota
@@ -522,29 +766,38 @@ const server = http.createServer(async (req, res) => {
         ipHash: hashValue(normalizeIpForId(clientIp)),
         cacheHit: diagnosis.meta.cacheHit
       });
+      recordLatency(Date.now() - startedAt);
       return;
     } catch (error) {
       if (error.code === "global_budget_exceeded") {
-        sendJson(res, 503, {
+        metrics.errors5xx += 1;
+        metrics.diagnoseBlocked += 1;
+        incrementBlockedReason("global_budget_exceeded");
+        sendJson(req, res, 503, {
           requestId,
           reason: "global_budget_exceeded",
           message: "service is in degraded mode"
         });
+        recordLatency(Date.now() - startedAt);
         return;
       }
 
       if (error.message === "upstream_timeout") {
-        sendJson(res, 504, {
+        metrics.errors5xx += 1;
+        sendJson(req, res, 504, {
           requestId,
           message: "upstream timeout"
         });
+        recordLatency(Date.now() - startedAt);
         return;
       }
 
-      sendJson(res, 500, {
+      metrics.errors5xx += 1;
+      sendJson(req, res, 500, {
         requestId,
         message: "diagnose failed"
       });
+      recordLatency(Date.now() - startedAt);
       return;
     }
   }

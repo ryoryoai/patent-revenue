@@ -17,6 +17,7 @@
 
 ## Security Controls
 - API behind origin check (same host or allowed origin)
+- Optional edge-only guard via `EDGE_SHARED_SECRET` (`x-edge-auth`)
 - Strict input validation (whitelist-like constraints)
 - Security headers:
   - `Content-Security-Policy`
@@ -25,6 +26,7 @@
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `Permissions-Policy`
 - Visitor cookie flags: `HttpOnly`, `SameSite=Lax`, `Secure` when HTTPS
+- Conditional CAPTCHA challenge (Cloudflare Turnstile) for suspicious traffic
 
 ## Resilience Controls
 - In-flight deduplication: one upstream lookup per normalized key
@@ -41,6 +43,10 @@
   - event type (`diagnose_success`, `quota_block`)
   - hashed user/ip identifiers
   - cache hit flag
+- Metrics endpoint: `GET /api/metrics` (requires `x-metrics-key`)
+- Alert hook support via `ALERT_WEBHOOK_URL`:
+  - hour/day global budget reaches 80%
+  - p95 latency exceeds threshold
 
 ## Frontend Event Tracking
 - `lp_view`
