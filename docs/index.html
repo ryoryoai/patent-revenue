@@ -3,31 +3,56 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Patent Value Check | 無料特許価値診断</title>
+    <title>Patent Value Check | 3デザイン比較</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
+  <body data-variant="current">
     <div class="bg-glow bg-glow-a"></div>
     <div class="bg-glow bg-glow-b"></div>
 
     <main class="container">
-      <header class="hero reveal">
-        <p class="eyebrow">Patent Value Check</p>
-        <h1>あなたの特許の価値を、すぐに診断します</h1>
-        <p class="lead">公開情報をもとに、Patent Value Scoreと評価根拠を提示。詳細分析と収益化ルートはPatentRevenueで確認できます。</p>
+      <section class="panel variant-panel reveal">
+        <h2>デザイン比較（3案）</h2>
+        <p class="section-lead">同じ機能を3つのトーンで比較できます。評価しやすいように、診断ロジックは共通です。</p>
+
+        <div class="variant-grid">
+          <article class="variant-card" data-variant-card="current">
+            <p class="variant-name">Current（アップデート）</p>
+            <p>特許価値の健康診断トーン。誠実・中立・安心を前面に。</p>
+            <button class="btn btn-ghost variant-btn" data-variant="current" type="button">この案を表示</button>
+          </article>
+
+          <article class="variant-card" data-variant-card="a">
+            <p class="variant-name">A案 クリーン＆プロ</p>
+            <p>診断機関のように情報階層を明確化。説明可能性と信頼を重視。</p>
+            <button class="btn btn-ghost variant-btn" data-variant="a" type="button">この案を表示</button>
+          </article>
+
+          <article class="variant-card" data-variant-card="b">
+            <p class="variant-name">B案 キャッシュ化訴求</p>
+            <p>経営者向けに意思決定を促進。眠れる特許を資産化する訴求。</p>
+            <button class="btn btn-ghost variant-btn" data-variant="b" type="button">この案を表示</button>
+          </article>
+        </div>
+      </section>
+
+      <header class="hero reveal delay-1">
+        <p class="eyebrow" id="hero-eyebrow">Patent Value Check</p>
+        <h1 id="hero-title">あなたの特許の価値を、すぐに診断します</h1>
+        <p class="lead" id="hero-lead">公開情報をもとに、Patent Value Scoreと評価根拠を提示。詳細分析と収益化ルートはPatentRevenueで確認できます。</p>
         <div class="badges">
-          <span>無料</span>
-          <span>30秒目安</span>
-          <span>公開情報のみ参照</span>
+          <span id="badge-1">無料</span>
+          <span id="badge-2">30秒目安</span>
+          <span id="badge-3">公開情報のみ参照</span>
         </div>
       </header>
 
       <section id="screen-input" class="panel reveal delay-1">
-        <h2>無料診断を開始</h2>
-        <p class="section-lead">特許番号・公開番号・キーワードのいずれかを入力してください。</p>
+        <h2 id="input-title">無料診断を開始</h2>
+        <p class="section-lead" id="input-lead">特許番号・公開番号・キーワードのいずれかを入力してください。</p>
 
         <form id="diagnosis-form" class="form-grid">
           <label class="full">
@@ -67,13 +92,13 @@
             </select>
           </label>
 
-          <button type="submit" class="btn btn-primary">価値を診断する</button>
+          <button id="diagnose-btn" type="submit" class="btn btn-primary">価値を診断する</button>
         </form>
       </section>
 
       <section id="screen-result" class="panel hidden reveal">
         <h2>診断結果（ティザー）</h2>
-        <p class="section-lead">まずは主要指標のみ公開します。詳細分析と収益化導線は会員向けです。</p>
+        <p class="section-lead" id="result-lead">まずは主要指標のみ公開します。詳細分析と収益化導線は会員向けです。</p>
 
         <div class="result-top">
           <article class="score-card" id="teaser-score"></article>
@@ -97,7 +122,7 @@
 
         <div class="cta-stack">
           <a id="join-link" href="https://patent-revenue.iprich.jp/" target="_blank" rel="noopener noreferrer" class="btn btn-primary">PatentRevenueで詳細分析と収益化ルートを見る</a>
-          <p class="small">登録導線には `source=patent-value-check` などの計測パラメータを付与します。</p>
+          <p class="small" id="cta-note">登録導線には `source=patent-value-check` などの計測パラメータを付与します。</p>
           <div class="cta-row">
             <button id="report-signup" class="btn btn-ghost" type="button">登録完了を報告（デモ計測）</button>
             <button id="back-to-input" class="btn btn-ghost" type="button">入力を修正する</button>
@@ -127,7 +152,7 @@
 
       <section class="panel caution reveal delay-2">
         <h2>注意事項</h2>
-        <p>このスコアは公開情報にもとづく目安で、取引価格や成約を保証するものではありません。法的助言を目的とするものではありません。</p>
+        <p id="caution-text">このスコアは公開情報にもとづく目安で、取引価格や成約を保証するものではありません。法的助言を目的とするものではありません。</p>
       </section>
     </main>
 

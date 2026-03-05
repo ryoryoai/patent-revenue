@@ -1,3 +1,48 @@
+const variants = {
+  current: {
+    label: "Current",
+    eyebrow: "Patent Value Check",
+    heroTitle: "あなたの特許の価値を、すぐに診断します",
+    heroLead: "公開情報をもとに、Patent Value Scoreと評価根拠を提示。詳細分析と収益化ルートはPatentRevenueで確認できます。",
+    badges: ["無料", "30秒目安", "公開情報のみ参照"],
+    inputTitle: "無料診断を開始",
+    inputLead: "特許番号・公開番号・キーワードのいずれかを入力してください。",
+    diagnoseButton: "価値を診断する",
+    resultLead: "まずは主要指標のみ公開します。詳細分析と収益化導線は会員向けです。",
+    joinText: "PatentRevenueで詳細分析と収益化ルートを見る",
+    ctaNote: "登録導線には `source=patent-value-check` などの計測パラメータを付与します。",
+    caution: "このスコアは公開情報にもとづく目安で、取引価格や成約を保証するものではありません。法的助言を目的とするものではありません。"
+  },
+  a: {
+    label: "A",
+    eyebrow: "A案 / クリーン＆プロ",
+    heroTitle: "特許価値の健康診断を、説明可能な形で。",
+    heroLead: "診断機関のように、透明性と再現性を重視。登録前に要点を提示し、詳細は会員画面で深掘りします。",
+    badges: ["説明可能", "守秘配慮", "専門家連携"],
+    inputTitle: "診断入力（最小構成）",
+    inputLead: "入力は最小限。判断に必要な情報だけ追加して精度を段階的に上げます。",
+    diagnoseButton: "スコアを診断する",
+    resultLead: "ティザーでは重要指標のみ提示。詳細内訳は会員向けで確認できます。",
+    joinText: "PatentRevenueで詳細分析を確認する",
+    ctaNote: "信頼性の高い評価フローに接続します。source/result_idを引き継ぎます。",
+    caution: "本診断は概算です。個別事情（権利範囲、市場実装、交渉条件）により評価は変動します。"
+  },
+  b: {
+    label: "B",
+    eyebrow: "B案 / キャッシュ化訴求",
+    heroTitle: "眠っている特許を、次の売上機会へ。",
+    heroLead: "維持費だけ払っている特許を資産として見直す入口です。まずは価値レンジと打ち手の方向性を可視化します。",
+    badges: ["資産化視点", "意思決定を高速化", "無料トライアル"],
+    inputTitle: "特許資産チェックを開始",
+    inputLead: "特許番号かキーワードを入れるだけ。経営判断に使える初期判断を返します。",
+    diagnoseButton: "資産価値をチェック",
+    resultLead: "まずは価値の手触りを提示。収益化ルートは登録後に具体化します。",
+    joinText: "PatentRevenueで買い手探索を始める",
+    ctaNote: "流入計測付きで登録導線に接続します（source=patent-value-check）。",
+    caution: "本表示は意思決定の補助情報です。価格・成約・法的結果を保証するものではありません。"
+  }
+};
+
 const mockPatents = {
   "7091234": {
     id: "7091234",
@@ -64,13 +109,28 @@ const joinLink = document.getElementById("join-link");
 const reportSignupBtn = document.getElementById("report-signup");
 const backToInputBtn = document.getElementById("back-to-input");
 
+const heroEyebrow = document.getElementById("hero-eyebrow");
+const heroTitle = document.getElementById("hero-title");
+const heroLead = document.getElementById("hero-lead");
+const badge1 = document.getElementById("badge-1");
+const badge2 = document.getElementById("badge-2");
+const badge3 = document.getElementById("badge-3");
+const inputTitle = document.getElementById("input-title");
+const inputLead = document.getElementById("input-lead");
+const diagnoseBtn = document.getElementById("diagnose-btn");
+const resultLead = document.getElementById("result-lead");
+const ctaNote = document.getElementById("cta-note");
+const cautionText = document.getElementById("caution-text");
+
 let latestResult = null;
+let currentVariant = "current";
 
 function trackEvent(name, payload = {}) {
   window.dataLayer = window.dataLayer || [];
   const event = {
     event: name,
     ts: new Date().toISOString(),
+    variant: currentVariant,
     ...payload
   };
   window.dataLayer.push(event);
@@ -252,7 +312,8 @@ function buildJoinUrl(result) {
   const params = new URLSearchParams({
     source: "patent-value-check",
     patent_id: result.patent.id,
-    result_id: result.resultId
+    result_id: result.resultId,
+    variant: currentVariant
   });
   return `https://patent-revenue.iprich.jp/?${params.toString()}#licence`;
 }
@@ -304,6 +365,35 @@ function showInputScreen() {
   screenResult.classList.add("hidden");
   screenInput.classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function applyVariant(variantKey) {
+  const key = variants[variantKey] ? variantKey : "current";
+  currentVariant = key;
+  const setting = variants[key];
+
+  document.body.dataset.variant = key;
+  heroEyebrow.textContent = setting.eyebrow;
+  heroTitle.textContent = setting.heroTitle;
+  heroLead.textContent = setting.heroLead;
+  badge1.textContent = setting.badges[0];
+  badge2.textContent = setting.badges[1];
+  badge3.textContent = setting.badges[2];
+  inputTitle.textContent = setting.inputTitle;
+  inputLead.textContent = setting.inputLead;
+  diagnoseBtn.textContent = setting.diagnoseButton;
+  resultLead.textContent = setting.resultLead;
+  joinLink.textContent = setting.joinText;
+  ctaNote.textContent = setting.ctaNote;
+  cautionText.textContent = setting.caution;
+
+  document.querySelectorAll(".variant-card").forEach((card) => {
+    card.classList.toggle("active", card.getAttribute("data-variant-card") === key);
+  });
+
+  if (latestResult) {
+    renderResult(latestResult);
+  }
 }
 
 diagnosisForm.addEventListener("submit", async (event) => {
@@ -384,4 +474,14 @@ reportSignupBtn.addEventListener("click", () => {
 
 backToInputBtn.addEventListener("click", showInputScreen);
 
+document.querySelectorAll(".variant-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.getAttribute("data-variant") || "current";
+    applyVariant(key);
+    trackEvent("variant_change", { to: key });
+  });
+});
+
+const initialVariant = new URLSearchParams(window.location.search).get("design") || "current";
+applyVariant(initialVariant);
 trackEvent("lp_view", { page: "home" });
