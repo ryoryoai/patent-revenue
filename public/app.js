@@ -1,47 +1,17 @@
-const variants = {
-  current: {
-    label: "Current",
-    eyebrow: "Patent Value Check",
-    heroTitle: "あなたの特許の価値を、すぐに診断します",
-    heroLead: "公開情報をもとに、Patent Value Scoreと評価根拠を提示。詳細分析と収益化ルートはPatentRevenueで確認できます。",
-    badges: ["無料", "30秒目安", "公開情報のみ参照"],
-    inputTitle: "無料診断を開始",
-    inputLead: "特許番号・公開番号・キーワードのいずれかを入力してください。",
-    diagnoseButton: "価値を診断する",
-    resultLead: "まずは主要指標のみ公開します。詳細分析と収益化導線は会員向けです。",
-    joinText: "PatentRevenueで詳細分析と収益化ルートを見る",
-    ctaNote: "登録導線には `source=patent-value-check` などの計測パラメータを付与します。",
-    caution: "このスコアは公開情報にもとづく目安で、取引価格や成約を保証するものではありません。法的助言を目的とするものではありません。"
+const heroCopies = [
+  {
+    title: "その特許、放置したままではもったいない。",
+    lead: "特許番号だけで、価値レンジと収益化の次の一手を最短60秒で概算。まずは経営判断に必要な入口を作ります。"
   },
-  a: {
-    label: "A",
-    eyebrow: "A案 / クリーン＆プロ",
-    heroTitle: "特許価値の健康診断を、説明可能な形で。",
-    heroLead: "診断機関のように、透明性と再現性を重視。登録前に要点を提示し、詳細は会員画面で深掘りします。",
-    badges: ["説明可能", "守秘配慮", "専門家連携"],
-    inputTitle: "診断入力（最小構成）",
-    inputLead: "入力は最小限。判断に必要な情報だけ追加して精度を段階的に上げます。",
-    diagnoseButton: "スコアを診断する",
-    resultLead: "ティザーでは重要指標のみ提示。詳細内訳は会員向けで確認できます。",
-    joinText: "PatentRevenueで詳細分析を確認する",
-    ctaNote: "信頼性の高い評価フローに接続します。source/result_idを引き継ぎます。",
-    caution: "本診断は概算です。個別事情（権利範囲、市場実装、交渉条件）により評価は変動します。"
+  {
+    title: "眠っている特許を、売れる・貸せる資産へ。",
+    lead: "国内特許に対応。個人情報不要で、価値の目安と進め方を先に確認できます。"
   },
-  b: {
-    label: "B",
-    eyebrow: "B案 / キャッシュ化訴求",
-    heroTitle: "眠っている特許を、次の売上機会へ。",
-    heroLead: "維持費だけ払っている特許を資産として見直す入口です。まずは価値レンジと打ち手の方向性を可視化します。",
-    badges: ["資産化視点", "意思決定を高速化", "無料トライアル"],
-    inputTitle: "特許資産チェックを開始",
-    inputLead: "特許番号かキーワードを入れるだけ。経営判断に使える初期判断を返します。",
-    diagnoseButton: "資産価値をチェック",
-    resultLead: "まずは価値の手触りを提示。収益化ルートは登録後に具体化します。",
-    joinText: "PatentRevenueで買い手探索を始める",
-    ctaNote: "流入計測付きで登録導線に接続します（source=patent-value-check）。",
-    caution: "本表示は意思決定の補助情報です。価格・成約・法的結果を保証するものではありません。"
+  {
+    title: "特許の価値、まずは数字で。",
+    lead: "概算の診断票を先に提示し、詳細な買い手探索と実務支援は登録後に進められます。"
   }
-};
+];
 
 const mockPatents = {
   "7091234": {
@@ -98,35 +68,45 @@ const useStatusFactor = {
   "": 0.88
 };
 
+const salesRangeMidpoint = {
+  lt100m: 50_000_000,
+  "100m_1b": 500_000_000,
+  "1b_10b": 5_000_000_000,
+  gt10b: 15_000_000_000,
+  "": 180_000_000
+};
+
+const categoryRoyaltyRange = {
+  "製造DX / AI": [0.012, 0.04],
+  "エネルギー / 材料": [0.01, 0.035],
+  "医療機器 / 画像解析": [0.015, 0.05],
+  "通信 / IoT": [0.012, 0.04],
+  ソフトウェア: [0.015, 0.055],
+  default: [0.01, 0.04]
+};
+
 const diagnosisForm = document.getElementById("diagnosis-form");
 const screenInput = document.getElementById("screen-input");
 const screenResult = document.getElementById("screen-result");
 const scoreEl = document.getElementById("teaser-score");
 const summaryEl = document.getElementById("teaser-summary");
+const valueEl = document.getElementById("teaser-value");
+const routeEl = document.getElementById("teaser-route");
+const nextEl = document.getElementById("teaser-next");
 const reasonsEl = document.getElementById("teaser-reasons");
 const gatedEl = document.getElementById("teaser-gated");
 const joinLink = document.getElementById("join-link");
 const reportSignupBtn = document.getElementById("report-signup");
 const backToInputBtn = document.getElementById("back-to-input");
-
-const heroEyebrow = document.getElementById("hero-eyebrow");
-const heroTitle = document.getElementById("hero-title");
-const heroLead = document.getElementById("hero-lead");
-const badge1 = document.getElementById("badge-1");
-const badge2 = document.getElementById("badge-2");
-const badge3 = document.getElementById("badge-3");
-const inputTitle = document.getElementById("input-title");
-const inputLead = document.getElementById("input-lead");
-const diagnoseBtn = document.getElementById("diagnose-btn");
-const resultLead = document.getElementById("result-lead");
 const ctaNote = document.getElementById("cta-note");
-const cautionText = document.getElementById("caution-text");
 const systemMessage = document.getElementById("system-message");
 const captchaBox = document.getElementById("captcha-box");
 const captchaWidget = document.getElementById("captcha-widget");
+const heroTitle = document.getElementById("hero-title");
+const heroLead = document.getElementById("hero-lead");
 
 let latestResult = null;
-let currentVariant = "current";
+let selectedCopyIndex = 0;
 let captchaToken = "";
 let captchaSiteKey = "";
 let turnstileWidgetId = null;
@@ -201,7 +181,7 @@ function trackEvent(name, payload = {}) {
   const event = {
     event: name,
     ts: new Date().toISOString(),
-    variant: currentVariant,
+    copy_variant: selectedCopyIndex + 1,
     ...payload
   };
   window.dataLayer.push(event);
@@ -310,14 +290,16 @@ async function fetchPatentInfoFallback(query) {
 
   await new Promise((resolve) => setTimeout(resolve, 350));
   const payload = patentNumber.length >= 6 ? mockPatents[patentNumber] || pseudoPatentFromQuery(query, patentNumber) : pseudoPatentFromQuery(query, "");
-  localStorage.setItem(cacheKey, JSON.stringify({ cachedAt: Date.now(), payload }));
-  return {
+  const response = {
     patent: payload,
     meta: {
       mode: "client-fallback",
       cacheHit: false
     }
   };
+
+  localStorage.setItem(cacheKey, JSON.stringify({ cachedAt: Date.now(), payload: response }));
+  return response;
 }
 
 async function fetchPatentInfo(query, challengeToken = "") {
@@ -380,7 +362,6 @@ function computeScores(patent, input) {
   const monetizationDensity = percentile(metrics.filingDensity, base.density[0], base.density[1]);
   const applicantBoost = patent.applicantType === "企業" ? 10 : patent.applicantType === "大学" ? 5 : 0;
   const monetizationRaw = monetizationPlayers * 0.45 + monetizationDensity * 0.45 + applicantBoost;
-
   const useFactor = useStatusFactor[input.useStatus || ""];
   const monetization = clamp(Math.round(monetizationRaw * useFactor), 0, 100);
 
@@ -405,10 +386,10 @@ function generateComment(scores) {
 
 function generateRationales(scores) {
   const items = [
-    { key: "impact", label: "影響度", val: scores.impact },
-    { key: "breadth", label: "権利の広さ", val: scores.breadth },
-    { key: "strength", label: "実務上の強さ", val: scores.strength },
-    { key: "monetization", label: "収益化の近さ", val: scores.monetization }
+    { label: "影響度", val: scores.impact },
+    { label: "権利の広さ", val: scores.breadth },
+    { label: "実務上の強さ", val: scores.strength },
+    { label: "収益化の近さ", val: scores.monetization }
   ];
 
   return items
@@ -421,94 +402,174 @@ function generateRationales(scores) {
     });
 }
 
+function yenRangeLabel(value) {
+  if (value >= 100_000_000) {
+    return `${(value / 100_000_000).toFixed(1)}億円`;
+  }
+  if (value >= 10_000) {
+    return `${Math.round(value / 10_000).toLocaleString("ja-JP")}万円`;
+  }
+  return `${Math.round(value).toLocaleString("ja-JP")}円`;
+}
+
+function calcAnnuityFactor(years, discountRate) {
+  if (discountRate <= 0) return years;
+  const n = clamp(years, 1, 8);
+  return (1 - 1 / Math.pow(1 + discountRate, n)) / discountRate;
+}
+
+function estimateValueRange(patent, scores, input) {
+  const sales = salesRangeMidpoint[input.salesRange || ""];
+  const contribution = Number(input.contribution || 0) || clamp((scores.monetization - 35) / 300, 0.06, 0.22);
+  const royalty = categoryRoyaltyRange[patent.category] || categoryRoyaltyRange.default;
+  const usableYears = clamp(Math.round(remainingYearsFromFiling(patent.filingDate)), 3, 7);
+  const annuityFactor = calcAnnuityFactor(usableYears, 0.12);
+  const statusFactor = useStatusFactor[input.useStatus || ""];
+
+  const low = sales * royalty[0] * contribution * annuityFactor * statusFactor;
+  const high = sales * royalty[1] * contribution * annuityFactor * statusFactor * 1.2;
+
+  const unknownCount = [input.useStatus, input.salesRange, input.contribution].filter((v) => !v).length;
+  const confidence = unknownCount >= 2 ? "低" : unknownCount === 1 ? "中" : "高";
+
+  return {
+    low: Math.max(low, 300_000),
+    high: Math.max(high, 2_000_000),
+    confidence,
+    reason: unknownCount === 0 ? "主要入力が揃っているため、レンジ幅を抑えています。" : "未入力項目があるため、レンジを広めに提示しています。"
+  };
+}
+
+function decideRoute(scores, input) {
+  if (scores.monetization >= 70 && (input.useStatus === "using" || input.useStatus === "planned")) {
+    return {
+      title: "ライセンス向き",
+      body: "用途が明確で収益化の近さが高く、買い手候補への打診設計と条件交渉が進めやすい状態です。"
+    };
+  }
+
+  if (scores.strength >= 68 && scores.breadth >= 62) {
+    return {
+      title: "売却向き",
+      body: "権利のまとまりがあり、譲渡時の説明材料を整理しやすい状態です。希望金額の妥当性を詰めるのが次の一手です。"
+    };
+  }
+
+  return {
+    title: "調査優先",
+    body: "市場実装と相手企業の仮説を補強すると、売却・ライセンスのどちらが有利か判断しやすくなります。"
+  };
+}
+
+function nextAction(route, valueRange) {
+  if (route.title === "ライセンス向き") {
+    return "登録後は、用途が近い企業を優先して打診リストを作成し、ロイヤルティ条件の初期案を作るのが効果的です。";
+  }
+  if (route.title === "売却向き") {
+    return `希望金額はまず${yenRangeLabel((valueRange.low + valueRange.high) / 2)}前後を軸に置き、譲渡条件を整理して交渉に入るのが堅実です。`;
+  }
+  return "まずは実施状況・競合・代替技術の確認を追加し、診断精度を上げてから収益化手段を選ぶのが安全です。";
+}
+
 function buildJoinUrl(result) {
   const params = new URLSearchParams({
     source: "patent-value-check",
     patent_id: result.patent.id,
-    result_id: result.resultId,
-    variant: currentVariant
+    result_id: result.resultId
   });
   return `https://patent-revenue.iprich.jp/?${params.toString()}#licence`;
 }
 
 function renderResult(result) {
   const score = result.scores;
+  const valueRange = result.valueRange;
+  const route = result.route;
   const rationales = generateRationales(score);
+  const next = nextAction(route, valueRange);
 
   scoreEl.innerHTML = `
     <p class="score-label">Patent Value Score</p>
     <p class="score-main">${score.total}</p>
-    <p class="rank">ランク ${score.rank}</p>
+    <p class="rank">ランク ${score.rank} / 信頼度 ${valueRange.confidence}</p>
   `;
 
   summaryEl.innerHTML = `
-    <h3>所見</h3>
+    <h3>診断サマリー</h3>
     <p class="title">${result.patent.title}</p>
     <p>${generateComment(score)}</p>
     <p class="small">特許ID: ${result.patent.id} / カテゴリ: ${result.patent.category}</p>
+    <p class="small">出願: ${result.patent.filingDate} / 登録: ${result.patent.registrationDate}</p>
     <p class="small">応答: ${result.meta?.mode || "api"} / キャッシュ: ${result.meta?.cacheHit ? "hit" : "miss"}</p>
     <p class="small"><a href="${result.patent.officialUrl}" target="_blank" rel="noopener noreferrer">J-PlatPatで確認</a></p>
   `;
 
+  valueEl.innerHTML = `
+    <h3>価値レンジ（概算）</h3>
+    <p class="title">${yenRangeLabel(valueRange.low)} 〜 ${yenRangeLabel(valueRange.high)}</p>
+    <p>${valueRange.reason}</p>
+  `;
+
+  routeEl.innerHTML = `
+    <h3>向いている収益化手段</h3>
+    <p class="title">${route.title}</p>
+    <p>${route.body}</p>
+  `;
+
+  nextEl.innerHTML = `
+    <h3>次の一手</h3>
+    <p>${next}</p>
+  `;
+
   reasonsEl.innerHTML = `
-    <h3>評価根拠（見出し）</h3>
+    <h3>評価根拠（公開範囲）</h3>
     <ul>${rationales.map((text) => `<li>${text}</li>`).join("")}</ul>
   `;
 
   gatedEl.innerHTML = `
     <h3>会員向け詳細（非表示）</h3>
     <div class="gated-list">
-      <p>・引用推移チャート</p>
-      <p>・関連企業リスト（上位20社）</p>
-      <p>・想定収益化ルート（売却/ライセンス）</p>
-      <p>・案件化優先順位</p>
+      <p>・影響度の年次推移グラフ</p>
+      <p>・候補企業リスト（用途一致順）</p>
+      <p>・売却/ライセンス条件の比較表</p>
+      <p>・交渉前チェックリスト</p>
     </div>
-    <p class="small">詳細はPatentRevenue会員向け画面で確認できます。</p>
+    <p class="small">詳細はPatentRevenue登録後に確認できます。</p>
   `;
 
   joinLink.href = buildJoinUrl(result);
+  ctaNote.textContent = "登録導線には source=patent-value-check と診断IDを付与します。";
 }
 
 function showResultScreen() {
-  screenInput.classList.add("hidden");
   screenResult.classList.remove("hidden");
   screenResult.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function showInputScreen() {
   screenResult.classList.add("hidden");
-  screenInput.classList.remove("hidden");
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  screenInput.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function applyVariant(variantKey) {
-  const key = variants[variantKey] ? variantKey : "current";
-  currentVariant = key;
-  const setting = variants[key];
+function applyHeroCopy(index) {
+  const i = clamp(index, 0, heroCopies.length - 1);
+  selectedCopyIndex = i;
+  const copy = heroCopies[i];
+  heroTitle.textContent = copy.title;
+  heroLead.textContent = copy.lead;
 
-  document.body.dataset.variant = key;
-  heroEyebrow.textContent = setting.eyebrow;
-  heroTitle.textContent = setting.heroTitle;
-  heroLead.textContent = setting.heroLead;
-  badge1.textContent = setting.badges[0];
-  badge2.textContent = setting.badges[1];
-  badge3.textContent = setting.badges[2];
-  inputTitle.textContent = setting.inputTitle;
-  inputLead.textContent = setting.inputLead;
-  diagnoseBtn.textContent = setting.diagnoseButton;
-  resultLead.textContent = setting.resultLead;
-  joinLink.textContent = setting.joinText;
-  ctaNote.textContent = setting.ctaNote;
-  cautionText.textContent = setting.caution;
-
-  document.querySelectorAll(".variant-card").forEach((card) => {
-    card.classList.toggle("active", card.getAttribute("data-variant-card") === key);
+  document.querySelectorAll(".copy-btn").forEach((button) => {
+    const isActive = Number(button.getAttribute("data-copy")) === i;
+    button.classList.toggle("active", isActive);
   });
-
-  if (latestResult) {
-    renderResult(latestResult);
-  }
 }
+
+document.querySelectorAll(".copy-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    const index = Number(button.getAttribute("data-copy") || 0);
+    applyHeroCopy(index);
+    trackEvent("hero_copy_change", { to: index + 1 });
+  });
+});
 
 diagnosisForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -525,8 +586,8 @@ diagnosisForm.addEventListener("submit", async (event) => {
     showSystemMessage("特許番号・公開番号・キーワードを入力してください。", "warn");
     return;
   }
-  clearSystemMessage();
 
+  clearSystemMessage();
   const submitButton = diagnosisForm.querySelector("button[type='submit']");
   const originalText = submitButton.textContent;
   submitButton.disabled = true;
@@ -543,14 +604,19 @@ diagnosisForm.addEventListener("submit", async (event) => {
       window.turnstile.reset(turnstileWidgetId);
     }
     hideCaptchaChallenge();
+
     const patent = diagnosis.patent;
     const scores = computeScores(patent, input);
+    const valueRange = estimateValueRange(patent, scores, input);
+    const route = decideRoute(scores, input);
 
     latestResult = {
       resultId: diagnosis.resultId || resultId(),
       input,
       patent,
       scores,
+      valueRange,
+      route,
       meta: diagnosis.meta || {}
     };
 
@@ -561,7 +627,8 @@ diagnosisForm.addEventListener("submit", async (event) => {
       result_id: latestResult.resultId,
       patent_id: patent.id,
       score: scores.total,
-      rank: scores.rank
+      rank: scores.rank,
+      route: route.title
     });
   } catch (error) {
     console.error(error);
@@ -572,13 +639,11 @@ diagnosisForm.addEventListener("submit", async (event) => {
         await showCaptchaChallenge(error.payload?.captchaSiteKey || captchaSiteKey);
       } else {
         const waitHint = error.payload?.retryAfterSeconds ? `約${error.payload.retryAfterSeconds}秒後` : "時間をおいて";
-        showSystemMessage(`上限に達しました。${waitHint}に再試行してください。詳細分析はPatentRevenue登録で継続できます。`, "warn");
+        showSystemMessage(`上限に達しました。${waitHint}に再試行してください。登録後は継続して詳細分析を進められます。`, "warn");
       }
-      trackEvent("diagnosis_limited", {
-        reason: error.payload?.reason || "rate_limited"
-      });
+      trackEvent("diagnosis_limited", { reason: error.payload?.reason || "rate_limited" });
     } else if (error.status === 503) {
-      showSystemMessage("現在アクセスが集中しています。キャッシュ結果のみ提供中です。しばらくして再試行してください。", "warn");
+      showSystemMessage("現在アクセスが集中しています。しばらくして再試行してください。", "warn");
     } else if (error.status === 403) {
       showSystemMessage("アクセス元が制限されています。ネットワーク管理者にお問い合わせください。", "error");
     } else {
@@ -614,14 +679,5 @@ reportSignupBtn.addEventListener("click", () => {
 
 backToInputBtn.addEventListener("click", showInputScreen);
 
-document.querySelectorAll(".variant-btn").forEach((button) => {
-  button.addEventListener("click", () => {
-    const key = button.getAttribute("data-variant") || "current";
-    applyVariant(key);
-    trackEvent("variant_change", { to: key });
-  });
-});
-
-const initialVariant = new URLSearchParams(window.location.search).get("design") || "current";
-applyVariant(initialVariant);
+applyHeroCopy(0);
 trackEvent("lp_view", { page: "home" });
