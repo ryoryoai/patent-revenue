@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" />
     <title>Patent Value Check | 特許価値の健康診断</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -10,140 +11,167 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="bg-glow bg-glow-a"></div>
-    <div class="bg-glow bg-glow-b"></div>
-
     <main class="container">
       <header class="hero panel reveal">
         <div class="hero-grid">
-          <section>
+          <section class="hero-text">
             <p class="eyebrow">Patent Value Check</p>
-            <h1 id="hero-title">その特許、放置したままではもったいない。</h1>
-            <p class="lead" id="hero-lead">特許番号だけで、価値レンジと収益化の次の一手を最短60秒で概算。まずは経営判断に必要な入口を作ります。</p>
-
-            <div class="copy-switch" role="tablist" aria-label="Hero copy">
-              <button class="copy-btn active" data-copy="0" type="button">コピー案1</button>
-              <button class="copy-btn" data-copy="1" type="button">コピー案2</button>
-              <button class="copy-btn" data-copy="2" type="button">コピー案3</button>
-            </div>
+            <h1>その特許、放置したままではもったいない。</h1>
+            <p class="lead">特許番号だけで、価値レンジと収益化の次の一手を最短60秒で概算。<br />個人情報不要。まずは経営判断の入口から。</p>
 
             <div class="trust-chips">
-              <span>国内特許のみ対応</span>
-              <span>登録・相談無料</span>
-              <span>成約時のみ15%</span>
-              <span>専門家が交渉支援</span>
+              <span class="chip">国内特許のみ対応</span>
+              <span class="chip">登録・相談無料</span>
+              <span class="chip">成約時のみ15%</span>
+              <span class="chip">専門家が交渉支援</span>
+            </div>
+
+            <div id="system-message" class="system-message hidden" role="status" aria-live="polite"></div>
+            <div id="captcha-box" class="captcha-box hidden">
+              <p class="small">不正アクセス対策のため追加認証が必要です。</p>
+              <div id="captcha-widget"></div>
+            </div>
+
+            <form id="diagnosis-form" class="hero-form">
+              <label for="query" class="sr-only">特許番号 / 公開番号 / キーワード</label>
+              <input id="query" name="query" type="text" placeholder="例: 特許第7091234号 / 特開2020-123456 / 画像解析 異常検知" required />
+              <button id="diagnose-btn" type="submit" class="btn btn-primary">無料で診断する</button>
+            </form>
+
+            <button id="toggle-options" class="btn-text" type="button">精度を上げる追加入力</button>
+            <div id="extra-fields" class="extra-fields hidden">
+              <label>
+                実施状況
+                <select id="use-status" name="useStatus" form="diagnosis-form">
+                  <option value="">未選択</option>
+                  <option value="using">現在使っている</option>
+                  <option value="planned">これから使う予定</option>
+                  <option value="not_using">使っていない</option>
+                </select>
+              </label>
+              <label>
+                対象の年間売上レンジ
+                <select id="sales-range" name="salesRange" form="diagnosis-form">
+                  <option value="">未選択</option>
+                  <option value="lt100m">〜1億円</option>
+                  <option value="100m_1b">1億円〜10億円</option>
+                  <option value="1b_10b">10億円〜100億円</option>
+                  <option value="gt10b">100億円以上</option>
+                </select>
+              </label>
+              <label>
+                特許の寄与度
+                <select id="contribution" name="contribution" form="diagnosis-form">
+                  <option value="">未選択</option>
+                  <option value="0.05">5%</option>
+                  <option value="0.10">10%</option>
+                  <option value="0.20">20%</option>
+                  <option value="0.30">30%以上</option>
+                </select>
+              </label>
             </div>
           </section>
 
           <aside class="sample-card" aria-label="診断サンプル">
-            <p class="small">結果サンプル</p>
+            <p class="sample-label">診断結果サンプル</p>
             <p class="score-label">Patent Value Score</p>
             <p class="sample-score">74</p>
-            <p class="sample-line">推定価値レンジ: 480万円〜3,200万円</p>
-            <p class="sample-line">向いている手段: ライセンス打診優先</p>
-            <p class="sample-line">信頼度: 中（追加入力で上げられます）</p>
+            <div class="sample-details">
+              <div class="sample-row">
+                <span class="sample-key">推定価値レンジ</span>
+                <span class="sample-val">480万〜3,200万円</span>
+              </div>
+              <div class="sample-row">
+                <span class="sample-key">向いている手段</span>
+                <span class="sample-val">ライセンス打診優先</span>
+              </div>
+              <div class="sample-row">
+                <span class="sample-key">信頼度</span>
+                <span class="sample-val">中（追加入力で向上）</span>
+              </div>
+            </div>
           </aside>
         </div>
       </header>
-
-      <section id="screen-input" class="panel reveal delay-1">
-        <h2>無料診断を開始</h2>
-        <p class="section-lead">個人情報不要。まずは特許番号・公開番号・キーワードで診断を開始してください。</p>
-
-        <div id="system-message" class="system-message hidden" role="status" aria-live="polite"></div>
-        <div id="captcha-box" class="captcha-box hidden">
-          <p class="small">不正アクセス対策のため追加認証が必要です。</p>
-          <div id="captcha-widget"></div>
-        </div>
-
-        <form id="diagnosis-form" class="form-stack">
-          <label>
-            特許番号 / 公開番号 / キーワード
-            <input id="query" name="query" type="text" placeholder="例: 特許第7091234号 / 特開2020-123456 / 画像解析 異常検知" required />
-          </label>
-
-          <label>
-            実施状況（任意）
-            <select id="use-status" name="useStatus">
-              <option value="">未選択</option>
-              <option value="using">現在使っている</option>
-              <option value="planned">これから使う予定</option>
-              <option value="not_using">使っていない</option>
-            </select>
-          </label>
-
-          <label>
-            対象の年間売上レンジ（任意）
-            <select id="sales-range" name="salesRange">
-              <option value="">未選択</option>
-              <option value="lt100m">〜1億円</option>
-              <option value="100m_1b">1億円〜10億円</option>
-              <option value="1b_10b">10億円〜100億円</option>
-              <option value="gt10b">100億円以上</option>
-            </select>
-          </label>
-
-          <label>
-            特許の寄与度（任意）
-            <select id="contribution" name="contribution">
-              <option value="">未選択</option>
-              <option value="0.05">5%</option>
-              <option value="0.10">10%</option>
-              <option value="0.20">20%</option>
-              <option value="0.30">30%以上</option>
-            </select>
-          </label>
-
-          <button id="diagnose-btn" type="submit" class="btn btn-primary">今すぐ診断する</button>
-        </form>
-      </section>
 
       <section class="panel reveal delay-1">
         <h2>この診断で分かること</h2>
         <div class="triple-grid">
           <article class="info-card">
+            <div class="info-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
             <h3>価値レンジ</h3>
-            <p>公開情報と入力条件から、概算レンジを提示します。</p>
+            <p>公開情報と入力条件から、概算の価値幅を提示します。概算であることを明示した上で、判断材料としてお渡しします。</p>
           </article>
           <article class="info-card">
+            <div class="info-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            </div>
             <h3>収益化ルート</h3>
-            <p>売却・ライセンス・調査優先のどれが適切かを表示します。</p>
+            <p>売却・ライセンス・調査優先のどれが適切かを、スコアと実施状況から判定して表示します。</p>
           </article>
           <article class="info-card">
+            <div class="info-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </div>
             <h3>次の一手</h3>
-            <p>登録後に何を進めるべきか、実務フローで示します。</p>
+            <p>診断結果をもとに、登録後に何をどの順で進めるべきか、実務フローで示します。</p>
           </article>
         </div>
       </section>
 
-      <section class="panel reveal delay-2">
-        <h2>なぜ信頼できる？</h2>
-        <p class="section-lead">実在する専門家が、買い手探索・商談・契約手続きまで支援する前提の診断設計です。</p>
+      <section class="panel reveal delay-1">
+        <h2>誰がサポートするのか</h2>
+        <p class="section-lead">実在する専門家が、買い手探索・商談・契約手続きまで支援します。診断だけで終わらせません。</p>
         <div class="expert-grid">
           <article class="expert-card">
-            <p class="expert-name">知財戦略担当</p>
-            <p>ポートフォリオ整理、用途整理、売却/ライセンス判断を担当。</p>
+            <div class="expert-avatar">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+            </div>
+            <div>
+              <p class="expert-name">知財戦略担当</p>
+              <p class="expert-desc">ポートフォリオ整理、用途整理、売却/ライセンス判断を担当。休眠特許の棚卸しから、収益化の優先順位づけまで一貫して対応します。</p>
+            </div>
           </article>
           <article class="expert-card">
-            <p class="expert-name">交渉・契約担当</p>
-            <p>条件交渉、ライセンス契約、移転実務までをサポート。</p>
+            <div class="expert-avatar">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+            </div>
+            <div>
+              <p class="expert-name">交渉・契約担当</p>
+              <p class="expert-desc">条件交渉、ライセンス契約、移転実務までをサポート。買い手との初回打診から成約まで伴走します。</p>
+            </div>
           </article>
         </div>
       </section>
 
       <section class="panel reveal delay-2">
-        <h2>どうやって算出している？</h2>
+        <h2>どうやって算出しているか</h2>
+        <p class="section-lead">以下の4軸を組み合わせて総合スコアを算出します。だから結果は概算レンジになります。</p>
         <div class="logic-grid">
-          <p>残存期間</p>
-          <p>市場性</p>
-          <p>実施状況</p>
-          <p>取引しやすさ</p>
+          <article class="logic-card">
+            <h3>残存期間</h3>
+            <p>出願から20年の満了までの残り年数。長いほど収益化の時間が確保できます。</p>
+          </article>
+          <article class="logic-card">
+            <h3>市場性</h3>
+            <p>同分野の出願密度と関連企業数。市場が活発なほど買い手が見つかりやすくなります。</p>
+          </article>
+          <article class="logic-card">
+            <h3>実施状況</h3>
+            <p>現在の利用状況と売上への寄与度。使われている特許ほど交渉力が高まります。</p>
+          </article>
+          <article class="logic-card">
+            <h3>取引しやすさ</h3>
+            <p>請求項の数・ファミリー構成・審査経緯。権利がまとまっているほど譲渡やライセンスが円滑です。</p>
+          </article>
         </div>
-        <p class="small">本診断は概算です。正確な評価は市場状況・実施実績・権利範囲・交渉条件で変動します。</p>
+        <p class="disclaimer">本診断は概算です。正確な評価は市場状況・実施実績・権利範囲・交渉条件で変動します。精密評価は登録後に専門家が対応します。</p>
       </section>
 
       <section id="screen-result" class="panel hidden reveal">
-        <h2>診断結果（ティザー）</h2>
+        <h2>診断結果</h2>
         <p class="section-lead" id="result-lead">重要指標を先に公開します。詳細の買い手探索と実務支援は登録後に進めます。</p>
 
         <div class="result-top">
@@ -173,8 +201,8 @@
         </article>
 
         <div class="cta-stack">
-          <a id="join-link" href="https://patent-revenue.iprich.jp/" target="_blank" rel="noopener noreferrer" class="btn btn-primary">この内容で登録へ進む</a>
-          <p class="small" id="cta-note">登録導線には `source=patent-value-check` と診断IDを付与します。</p>
+          <a id="join-link" href="https://patent-revenue.iprich.jp/#licence" target="_blank" rel="noopener noreferrer" class="btn btn-primary">この内容で登録へ進む</a>
+          <p class="small" id="cta-note">登録導線には source=patent-value-check と診断IDを付与します。</p>
           <div class="cta-row">
             <button id="report-signup" class="btn btn-ghost" type="button">登録完了を報告（デモ計測）</button>
             <button id="back-to-input" class="btn btn-ghost" type="button">入力を修正する</button>
@@ -190,11 +218,15 @@
         </details>
         <details>
           <summary>実際の売買価格を保証しますか</summary>
-          <p>保証しません。取引条件、交渉、法的状況により価格は変動します。</p>
+          <p>保証しません。取引条件、交渉、法的状況により価格は変動します。正確な評価は登録後の精密診断で対応します。</p>
         </details>
         <details>
           <summary>入力した情報は保存されますか</summary>
-          <p>同一入力の再計算を避けるため、一時キャッシュを利用します。</p>
+          <p>同一入力の再計算を避けるため、一時キャッシュを利用します。個人を特定する情報は収集しません。</p>
+        </details>
+        <details>
+          <summary>登録後に費用はかかりますか</summary>
+          <p>登録・相談は無料です。費用が発生するのは売却やライセンスが成約した場合のみ（成約額の15%）です。</p>
         </details>
       </section>
 

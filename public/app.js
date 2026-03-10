@@ -1,18 +1,3 @@
-const heroCopies = [
-  {
-    title: "その特許、放置したままではもったいない。",
-    lead: "特許番号だけで、価値レンジと収益化の次の一手を最短60秒で概算。まずは経営判断に必要な入口を作ります。"
-  },
-  {
-    title: "眠っている特許を、売れる・貸せる資産へ。",
-    lead: "国内特許に対応。個人情報不要で、価値の目安と進め方を先に確認できます。"
-  },
-  {
-    title: "特許の価値、まずは数字で。",
-    lead: "概算の診断票を先に提示し、詳細な買い手探索と実務支援は登録後に進められます。"
-  }
-];
-
 const mockPatents = {
   "7091234": {
     id: "7091234",
@@ -86,7 +71,6 @@ const categoryRoyaltyRange = {
 };
 
 const diagnosisForm = document.getElementById("diagnosis-form");
-const screenInput = document.getElementById("screen-input");
 const screenResult = document.getElementById("screen-result");
 const scoreEl = document.getElementById("teaser-score");
 const summaryEl = document.getElementById("teaser-summary");
@@ -102,15 +86,21 @@ const ctaNote = document.getElementById("cta-note");
 const systemMessage = document.getElementById("system-message");
 const captchaBox = document.getElementById("captcha-box");
 const captchaWidget = document.getElementById("captcha-widget");
-const heroTitle = document.getElementById("hero-title");
-const heroLead = document.getElementById("hero-lead");
+const toggleOptions = document.getElementById("toggle-options");
+const extraFields = document.getElementById("extra-fields");
 
 let latestResult = null;
-let selectedCopyIndex = 0;
 let captchaToken = "";
 let captchaSiteKey = "";
 let turnstileWidgetId = null;
 let turnstileLoader = null;
+
+if (toggleOptions && extraFields) {
+  toggleOptions.addEventListener("click", () => {
+    const isHidden = extraFields.classList.toggle("hidden");
+    toggleOptions.textContent = isHidden ? "精度を上げる追加入力" : "追加入力を閉じる";
+  });
+}
 
 function showSystemMessage(message, tone = "warn") {
   if (!systemMessage) return;
@@ -162,7 +152,7 @@ async function showCaptchaChallenge(siteKey) {
   }
 
   captchaSiteKey = siteKey;
-  captchaWidget.innerHTML = "";
+  captchaWidget.replaceChildren();
   turnstileWidgetId = window.turnstile.render(captchaWidget, {
     sitekey: siteKey,
     theme: "light",
@@ -181,7 +171,6 @@ function trackEvent(name, payload = {}) {
   const event = {
     event: name,
     ts: new Date().toISOString(),
-    copy_variant: selectedCopyIndex + 1,
     ...payload
   };
   window.dataLayer.push(event);
@@ -480,61 +469,97 @@ function buildJoinUrl(result) {
   return `https://patent-revenue.iprich.jp/?${params.toString()}#licence`;
 }
 
+function createNode(tagName, { className = "", text = "" } = {}) {
+  const node = document.createElement(tagName);
+  if (className) node.className = className;
+  if (text) node.textContent = text;
+  return node;
+}
+
+function appendChildren(parent, children) {
+  parent.replaceChildren(...children);
+}
+
+function createExternalLink(href, text) {
+  const link = document.createElement("a");
+  link.textContent = text;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+
+  try {
+    const url = new URL(String(href || ""));
+    link.href = url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "#";
+  } catch (error) {
+    link.href = "#";
+  }
+
+  return link;
+}
+
 function renderResult(result) {
   const score = result.scores;
   const valueRange = result.valueRange;
   const route = result.route;
   const rationales = generateRationales(score);
   const next = nextAction(route, valueRange);
+  appendChildren(scoreEl, [
+    createNode("p", { className: "score-label", text: "Patent Value Score" }),
+    createNode("p", { className: "score-main", text: String(score.total) }),
+    createNode("p", { className: "rank", text: `ランク ${score.rank} / 信頼度 ${valueRange.confidence}` })
+  ]);
 
-  scoreEl.innerHTML = `
-    <p class="score-label">Patent Value Score</p>
-    <p class="score-main">${score.total}</p>
-    <p class="rank">ランク ${score.rank} / 信頼度 ${valueRange.confidence}</p>
-  `;
+  const officialLinkRow = createNode("p", { className: "small" });
+  officialLinkRow.appendChild(createExternalLink(result.patent.officialUrl, "J-PlatPatで確認"));
+  appendChildren(summaryEl, [
+    createNode("h3", { text: "診断サマリー" }),
+    createNode("p", { className: "title", text: result.patent.title }),
+    createNode("p", { text: generateComment(score) }),
+    createNode("p", { className: "small", text: `特許ID: ${result.patent.id} / カテゴリ: ${result.patent.category}` }),
+    createNode("p", { className: "small", text: `出願: ${result.patent.filingDate} / 登録: ${result.patent.registrationDate}` }),
+    createNode("p", { className: "small", text: `応答: ${result.meta?.mode || "api"} / キャッシュ: ${result.meta?.cacheHit ? "hit" : "miss"}` }),
+    officialLinkRow
+  ]);
 
-  summaryEl.innerHTML = `
-    <h3>診断サマリー</h3>
-    <p class="title">${result.patent.title}</p>
-    <p>${generateComment(score)}</p>
-    <p class="small">特許ID: ${result.patent.id} / カテゴリ: ${result.patent.category}</p>
-    <p class="small">出願: ${result.patent.filingDate} / 登録: ${result.patent.registrationDate}</p>
-    <p class="small">応答: ${result.meta?.mode || "api"} / キャッシュ: ${result.meta?.cacheHit ? "hit" : "miss"}</p>
-    <p class="small"><a href="${result.patent.officialUrl}" target="_blank" rel="noopener noreferrer">J-PlatPatで確認</a></p>
-  `;
+  appendChildren(valueEl, [
+    createNode("h3", { text: "価値レンジ（概算）" }),
+    createNode("p", { className: "title", text: `${yenRangeLabel(valueRange.low)} 〜 ${yenRangeLabel(valueRange.high)}` }),
+    createNode("p", { text: valueRange.reason })
+  ]);
 
-  valueEl.innerHTML = `
-    <h3>価値レンジ（概算）</h3>
-    <p class="title">${yenRangeLabel(valueRange.low)} 〜 ${yenRangeLabel(valueRange.high)}</p>
-    <p>${valueRange.reason}</p>
-  `;
+  appendChildren(routeEl, [
+    createNode("h3", { text: "向いている収益化手段" }),
+    createNode("p", { className: "title", text: route.title }),
+    createNode("p", { text: route.body })
+  ]);
 
-  routeEl.innerHTML = `
-    <h3>向いている収益化手段</h3>
-    <p class="title">${route.title}</p>
-    <p>${route.body}</p>
-  `;
+  appendChildren(nextEl, [
+    createNode("h3", { text: "次の一手" }),
+    createNode("p", { text: next })
+  ]);
 
-  nextEl.innerHTML = `
-    <h3>次の一手</h3>
-    <p>${next}</p>
-  `;
+  const rationaleList = document.createElement("ul");
+  rationales.forEach((text) => {
+    rationaleList.appendChild(createNode("li", { text }));
+  });
+  appendChildren(reasonsEl, [
+    createNode("h3", { text: "評価根拠（公開範囲）" }),
+    rationaleList
+  ]);
 
-  reasonsEl.innerHTML = `
-    <h3>評価根拠（公開範囲）</h3>
-    <ul>${rationales.map((text) => `<li>${text}</li>`).join("")}</ul>
-  `;
-
-  gatedEl.innerHTML = `
-    <h3>会員向け詳細（非表示）</h3>
-    <div class="gated-list">
-      <p>・影響度の年次推移グラフ</p>
-      <p>・候補企業リスト（用途一致順）</p>
-      <p>・売却/ライセンス条件の比較表</p>
-      <p>・交渉前チェックリスト</p>
-    </div>
-    <p class="small">詳細はPatentRevenue登録後に確認できます。</p>
-  `;
+  const gatedList = createNode("div", { className: "gated-list" });
+  [
+    "・影響度の年次推移グラフ",
+    "・候補企業リスト（用途一致順）",
+    "・売却/ライセンス条件の比較表",
+    "・交渉前チェックリスト"
+  ].forEach((text) => {
+    gatedList.appendChild(createNode("p", { text }));
+  });
+  appendChildren(gatedEl, [
+    createNode("h3", { text: "会員向け詳細（非表示）" }),
+    gatedList,
+    createNode("p", { className: "small", text: "詳細はPatentRevenue登録後に確認できます。" })
+  ]);
 
   joinLink.href = buildJoinUrl(result);
   ctaNote.textContent = "登録導線には source=patent-value-check と診断IDを付与します。";
@@ -547,29 +572,8 @@ function showResultScreen() {
 
 function showInputScreen() {
   screenResult.classList.add("hidden");
-  screenInput.scrollIntoView({ behavior: "smooth", block: "start" });
+  document.querySelector(".hero").scrollIntoView({ behavior: "smooth", block: "start" });
 }
-
-function applyHeroCopy(index) {
-  const i = clamp(index, 0, heroCopies.length - 1);
-  selectedCopyIndex = i;
-  const copy = heroCopies[i];
-  heroTitle.textContent = copy.title;
-  heroLead.textContent = copy.lead;
-
-  document.querySelectorAll(".copy-btn").forEach((button) => {
-    const isActive = Number(button.getAttribute("data-copy")) === i;
-    button.classList.toggle("active", isActive);
-  });
-}
-
-document.querySelectorAll(".copy-btn").forEach((button) => {
-  button.addEventListener("click", () => {
-    const index = Number(button.getAttribute("data-copy") || 0);
-    applyHeroCopy(index);
-    trackEvent("hero_copy_change", { to: index + 1 });
-  });
-});
 
 diagnosisForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -679,5 +683,4 @@ reportSignupBtn.addEventListener("click", () => {
 
 backToInputBtn.addEventListener("click", showInputScreen);
 
-applyHeroCopy(0);
 trackEvent("lp_view", { page: "home" });

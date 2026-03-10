@@ -6,6 +6,7 @@ const crypto = require("crypto");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
+const isProduction = process.env.NODE_ENV === "production";
 
 const QUOTA_PER_DAY = Number(process.env.ANON_DAILY_QUOTA || 5);
 const BURST_INTERVAL_MS = Number(process.env.BURST_INTERVAL_MS || 15_000);
@@ -16,15 +17,66 @@ const BODY_LIMIT_BYTES = Number(process.env.BODY_LIMIT_BYTES || 4 * 1024);
 const GLOBAL_DAY_LIMIT = Number(process.env.GLOBAL_DAY_LIMIT || 3_000);
 const GLOBAL_HOUR_LIMIT = Number(process.env.GLOBAL_HOUR_LIMIT || 500);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 4_500);
-const HASH_SECRET = process.env.HASH_SECRET || "pvc-dev-secret";
+const DEFAULT_ALLOWED_ORIGINS = ["https://ryoryoai.github.io"];
+const CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 const CAPTCHA_REQUIRED_TTL_MS = Number(process.env.CAPTCHA_REQUIRED_TTL_MS || 10 * 60_000);
 
-const EDGE_SHARED_SECRET = process.env.EDGE_SHARED_SECRET || "";
-const METRICS_API_KEY = process.env.METRICS_API_KEY || "dev-metrics-key";
+const EDGE_SHARED_SECRET = resolveSecret("EDGE_SHARED_SECRET", "");
 const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
+
+function resolveSecret(name, devDefault) {
+  const configured = String(process.env[name] || "").trim();
+  if (configured) return configured;
+  if (isProduction) {
+    throw new Error(`${name} must be set when NODE_ENV=production`);
+  }
+  console.warn(`[config] ${name} is not set. Using development default.`);
+  return devDefault;
+}
+
+function normalizeOriginValue(value) {
+  try {
+    return new URL(String(value)).origin;
+  } catch (error) {
+    return null;
+  }
+}
+
+function parseOriginList(raw, defaults = []) {
+  const values = [...defaults, ...String(raw || "").split(",")]
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const normalized = new Set();
+  values.forEach((value) => {
+    const origin = normalizeOriginValue(value);
+    if (origin) {
+      normalized.add(origin);
+    } else {
+      console.warn(`[config] ignoring invalid origin: ${value}`);
+    }
+  });
+  return normalized;
+}
+
+function normalizeIpLiteral(value) {
+  return String(value || "").trim().replace(/^::ffff:/, "");
+}
+
+function parseProxyList(raw) {
+  return String(raw || "")
+    .split(",")
+    .map((value) => normalizeIpLiteral(value))
+    .filter(Boolean);
+}
+
+const HASH_SECRET = resolveSecret("HASH_SECRET", "pvc-dev-secret");
+const METRICS_API_KEY = resolveSecret("METRICS_API_KEY", "dev-metrics-key");
+const ALLOWED_ORIGINS = parseOriginList(process.env.ALLOWED_ORIGINS, DEFAULT_ALLOWED_ORIGINS);
+const TRUSTED_PROXIES = parseProxyList(process.env.TRUSTED_PROXIES);
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -184,12 +236,27 @@ function parseCookies(req) {
   return map;
 }
 
+function isTrustedProxy(req) {
+  const remoteIp = normalizeIpLiteral(req.socket.remoteAddress || "");
+  return TRUSTED_PROXIES.length > 0 && TRUSTED_PROXIES.includes(remoteIp);
+}
+
 function extractClientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.length > 0) {
-    return forwarded.split(",")[0].trim();
+  const remoteAddress = req.socket.remoteAddress || "0.0.0.0";
+  if (isTrustedProxy(req)) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.length > 0) {
+      const parts = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+      // rightmost non-proxy IP: walk from the end, skip trusted proxies
+      for (let i = parts.length - 1; i >= 0; i--) {
+        if (!TRUSTED_PROXIES.includes(normalizeIpLiteral(parts[i]))) {
+          return parts[i];
+        }
+      }
+      return parts[0];
+    }
   }
-  return req.socket.remoteAddress || "0.0.0.0";
+  return remoteAddress;
 }
 
 function normalizeIpForId(ip) {
@@ -440,11 +507,17 @@ function checkAndConsumeGlobalBudget() {
 function isAllowedOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
+  const normalizedOrigin = normalizeOriginValue(origin);
+  if (!normalizedOrigin) return false;
 
-  const host = req.headers.host || "";
-  if (origin.includes(host)) return true;
-  if (origin === "https://ryoryoai.github.io") return true;
-  return false;
+  let protocol = req.socket.encrypted ? "https" : "http";
+  if (isTrustedProxy(req)) {
+    const protoHeader = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+    if (protoHeader) protocol = protoHeader;
+  }
+  const requestOrigin = req.headers.host ? normalizeOriginValue(`${protocol}://${req.headers.host}`) : null;
+
+  return normalizedOrigin === requestOrigin || ALLOWED_ORIGINS.has(normalizedOrigin);
 }
 
 function applySecurityHeaders(req, res, requestId) {
@@ -455,7 +528,7 @@ function applySecurityHeaders(req, res, requestId) {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    CONTENT_SECURITY_POLICY
   );
 
   if (req.headers["x-forwarded-proto"] === "https" || req.socket.encrypted) {
