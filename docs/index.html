@@ -190,6 +190,30 @@
           <article class="card gated" id="teaser-gated"></article>
         </div>
 
+        <div id="detailed-report-area" class="detailed-report-area">
+          <button id="detailed-report-btn" class="btn btn-primary" type="button">詳細レポートを生成</button>
+          <section id="detailed-report" class="card hidden"></section>
+        </div>
+
+        <div class="email-form-area">
+          <h3>診断結果をメールで受け取る</h3>
+          <div class="email-form">
+            <label>
+              メールアドレス <span class="required">*</span>
+              <input id="report-email" type="email" placeholder="example@example.com" required />
+            </label>
+            <label>
+              氏名（任意）
+              <input id="report-name" type="text" placeholder="山田 太郎" />
+            </label>
+            <label class="checkbox-label">
+              <input id="privacy-agree" type="checkbox" />
+              <a href="./privacy.html" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>に同意する
+            </label>
+            <button id="send-report-btn" class="btn btn-primary" type="button">結果をメールで受け取る</button>
+          </div>
+        </div>
+
         <article class="benefit-box">
           <h3>登録するとできること</h3>
           <ul>

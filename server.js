@@ -1,8 +1,23 @@
 const http = require("http");
 const https = require("https");
-const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+
+const {
+  normalizeIpLiteral,
+  normalizeOriginValue,
+  parseOriginList,
+  parseProxyList,
+  resolveSecret
+} = require("./lib/env");
+const {
+  readJsonBody,
+  sendFile,
+  sendJson
+} = require("./lib/http-utils");
+const { generateDetailedReport } = require("./lib/llm");
+const { sendResultEmail } = require("./lib/mailer");
+const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -24,112 +39,18 @@ const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 const CAPTCHA_REQUIRED_TTL_MS = Number(process.env.CAPTCHA_REQUIRED_TTL_MS || 10 * 60_000);
 
-const EDGE_SHARED_SECRET = resolveSecret("EDGE_SHARED_SECRET", "");
+const EDGE_SHARED_SECRET = resolveSecret("EDGE_SHARED_SECRET", "", { isProduction });
 const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
-
-function resolveSecret(name, devDefault) {
-  const configured = String(process.env[name] || "").trim();
-  if (configured) return configured;
-  if (isProduction) {
-    throw new Error(`${name} must be set when NODE_ENV=production`);
-  }
-  console.warn(`[config] ${name} is not set. Using development default.`);
-  return devDefault;
-}
-
-function normalizeOriginValue(value) {
-  try {
-    return new URL(String(value)).origin;
-  } catch (error) {
-    return null;
-  }
-}
-
-function parseOriginList(raw, defaults = []) {
-  const values = [...defaults, ...String(raw || "").split(",")]
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  const normalized = new Set();
-  values.forEach((value) => {
-    const origin = normalizeOriginValue(value);
-    if (origin) {
-      normalized.add(origin);
-    } else {
-      console.warn(`[config] ignoring invalid origin: ${value}`);
-    }
-  });
-  return normalized;
-}
-
-function normalizeIpLiteral(value) {
-  return String(value || "").trim().replace(/^::ffff:/, "");
-}
-
-function parseProxyList(raw) {
-  return String(raw || "")
-    .split(",")
-    .map((value) => normalizeIpLiteral(value))
-    .filter(Boolean);
-}
-
-const HASH_SECRET = resolveSecret("HASH_SECRET", "pvc-dev-secret");
-const METRICS_API_KEY = resolveSecret("METRICS_API_KEY", "dev-metrics-key");
+const HASH_SECRET = resolveSecret("HASH_SECRET", "pvc-dev-secret", { isProduction });
+const METRICS_API_KEY = resolveSecret("METRICS_API_KEY", "dev-metrics-key", { isProduction });
 const ALLOWED_ORIGINS = parseOriginList(process.env.ALLOWED_ORIGINS, DEFAULT_ALLOWED_ORIGINS);
 const TRUSTED_PROXIES = parseProxyList(process.env.TRUSTED_PROXIES);
-
-const mimeTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg"
-};
-
-const mockPatents = {
-  "7091234": {
-    id: "7091234",
-    title: "製造ライン異常検知システム",
-    applicant: "株式会社ミライファクトリー",
-    applicantType: "企業",
-    registrationDate: "2022-11-15",
-    filingDate: "2019-02-14",
-    category: "製造DX / AI",
-    status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/",
-    metrics: { citations: 34, citationGrowth: 18, claimCount: 12, familySize: 6, classRank: 71, marketPlayers: 24, filingDensity: 68, prosecutionMonths: 20 }
-  },
-  "6810455": {
-    id: "6810455",
-    title: "高効率熱交換モジュール",
-    applicant: "東都エネルギー株式会社",
-    applicantType: "企業",
-    registrationDate: "2021-06-30",
-    filingDate: "2017-08-08",
-    category: "エネルギー / 材料",
-    status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/",
-    metrics: { citations: 22, citationGrowth: 8, claimCount: 9, familySize: 4, classRank: 60, marketPlayers: 17, filingDensity: 58, prosecutionMonths: 26 }
-  },
-  "7420901": {
-    id: "7420901",
-    title: "マルチモーダル医療画像解析装置",
-    applicant: "メディコアテック株式会社",
-    applicantType: "企業",
-    registrationDate: "2024-03-22",
-    filingDate: "2021-10-03",
-    category: "医療機器 / 画像解析",
-    status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/",
-    metrics: { citations: 28, citationGrowth: 23, claimCount: 15, familySize: 7, classRank: 78, marketPlayers: 26, filingDensity: 72, prosecutionMonths: 18 }
-  }
-};
 
 const userLimitStore = new Map();
 const resultCache = new Map();
 const inFlight = new Map();
+const reportLimitStore = new Map();
+const emailLimitStore = new Map();
 
 const globalBudget = {
   dayResetAt: nextJstMidnight(),
@@ -173,56 +94,6 @@ function nextJstMidnight() {
 
 function hashValue(raw) {
   return crypto.createHmac("sha256", HASH_SECRET).update(raw).digest("hex").slice(0, 24);
-}
-
-function normalizePatentNumber(input) {
-  return String(input || "")
-    .replace(/特許第/g, "")
-    .replace(/号/g, "")
-    .replace(/[\s-]/g, "")
-    .replace(/[^0-9]/g, "");
-}
-
-function hashString(value) {
-  let hash = 0;
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash << 5) - hash + value.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
-function pseudoPatentFromQuery(query, number) {
-  const token = number || query;
-  const h = hashString(token);
-  const categories = ["通信 / IoT", "ソフトウェア", "製造DX / AI", "エネルギー / 材料", "医療機器 / 画像解析"];
-  const category = categories[h % categories.length];
-  const filingYear = 2010 + (h % 14);
-  const filingMonth = String((h % 12) + 1).padStart(2, "0");
-  const filingDay = String((h % 27) + 1).padStart(2, "0");
-  const applicantType = ["企業", "大学", "個人"][h % 3];
-
-  return {
-    id: number || `KW${(h % 900000 + 100000).toString()}`,
-    title: number ? `特許第${number}号（モック推定）` : `「${query}」関連技術（モック推定）`,
-    applicant: applicantType === "企業" ? "モックテック株式会社" : applicantType === "大学" ? "モック工業大学" : "モック発明者",
-    applicantType,
-    registrationDate: `${filingYear + 2}-${filingMonth}-${filingDay}`,
-    filingDate: `${filingYear}-${filingMonth}-${filingDay}`,
-    category,
-    status: "登録",
-    officialUrl: "https://www.j-platpat.inpit.go.jp/",
-    metrics: {
-      citations: 2 + (h % 43),
-      citationGrowth: -6 + (h % 34),
-      claimCount: 3 + (h % 18),
-      familySize: 1 + (h % 10),
-      classRank: 35 + (h % 58),
-      marketPlayers: 5 + (h % 33),
-      filingDensity: 20 + (h % 70),
-      prosecutionMonths: 12 + (h % 28)
-    }
-  };
 }
 
 function parseCookies(req) {
@@ -278,6 +149,16 @@ function ensureVisitorCookie(req, res) {
   if (secureFlag) cookie.push("Secure");
   res.setHeader("Set-Cookie", cookie.join("; "));
   return visitorId;
+}
+
+function getDailyLimitState(store, key) {
+  const now = Date.now();
+  let state = store.get(key);
+  if (!state || now >= state.resetAt) {
+    state = { count: 0, resetAt: nextJstMidnight() };
+    store.set(key, state);
+  }
+  return state;
 }
 
 function getUserState(identifier) {
@@ -544,53 +425,8 @@ function applyApiCors(req, res) {
   }
 }
 
-function sendJson(req, res, status, payload) {
-  if (req.url && req.url.startsWith("/api/")) {
-    applyApiCors(req, res);
-  }
-
-  const body = JSON.stringify(payload);
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Content-Length": Buffer.byteLength(body)
-  });
-  res.end(body);
-}
-
-function sendFile(res, filePath) {
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Not found");
-      return;
-    }
-
-    const ext = path.extname(filePath);
-    res.writeHead(200, { "Content-Type": mimeTypes[ext] || "application/octet-stream" });
-    res.end(data);
-  });
-}
-
-function readJsonBody(req, limitBytes) {
-  return new Promise((resolve, reject) => {
-    let raw = "";
-    req.on("data", (chunk) => {
-      raw += chunk;
-      if (Buffer.byteLength(raw) > limitBytes) {
-        reject(new Error("payload_too_large"));
-      }
-    });
-
-    req.on("end", () => {
-      try {
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch (error) {
-        reject(new Error("invalid_json"));
-      }
-    });
-
-    req.on("error", () => reject(new Error("read_error")));
-  });
+function respondJson(req, res, status, payload) {
+  sendJson(req, res, status, payload, { applyCors: applyApiCors });
 }
 
 function validateQuery(query) {
@@ -599,17 +435,6 @@ function validateQuery(query) {
   if (text.length > 200) return { ok: false, message: "query too long" };
   if (/[\x00-\x1F\x7F]/.test(text)) return { ok: false, message: "invalid characters" };
   return { ok: true, text };
-}
-
-function lookupPatent(query) {
-  const patentNumber = normalizePatentNumber(query);
-  metrics.upstreamCalls += 1;
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const patent = patentNumber.length >= 6 ? mockPatents[patentNumber] || pseudoPatentFromQuery(query, patentNumber) : pseudoPatentFromQuery(query, "");
-      resolve(patent);
-    }, 250);
-  });
 }
 
 async function verifyTurnstileToken(token, clientIp) {
@@ -672,6 +497,7 @@ async function getDiagnosis(query, requestId) {
 
   let runner = inFlight.get(cacheKey);
   if (!runner) {
+    metrics.upstreamCalls += 1;
     runner = lookupPatent(query)
       .then((patent) => {
         resultCache.set(cacheKey, {
@@ -723,13 +549,13 @@ const server = http.createServer(async (req, res) => {
   if (req.url && req.url.startsWith("/api/")) {
     if (!isAllowedOrigin(req)) {
       metrics.errors4xx += 1;
-      sendJson(req, res, 403, { requestId, message: "forbidden origin" });
+      respondJson(req, res, 403, { requestId, message: "forbidden origin" });
       return;
     }
 
     if (EDGE_SHARED_SECRET && req.headers["x-edge-auth"] !== EDGE_SHARED_SECRET) {
       metrics.errors4xx += 1;
-      sendJson(req, res, 403, { requestId, message: "edge auth required" });
+      respondJson(req, res, 403, { requestId, message: "edge auth required" });
       return;
     }
 
@@ -747,11 +573,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/api/metrics") {
     if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
       metrics.errors4xx += 1;
-      sendJson(req, res, 403, { requestId, message: "forbidden" });
+      respondJson(req, res, 403, { requestId, message: "forbidden" });
       return;
     }
 
-    sendJson(req, res, 200, {
+    respondJson(req, res, 200, {
       requestId,
       metrics: {
         ...metrics,
@@ -762,6 +588,87 @@ const server = http.createServer(async (req, res) => {
         day: { used: globalBudget.dayCount, limit: GLOBAL_DAY_LIMIT, resetAt: new Date(globalBudget.dayResetAt).toISOString() }
       }
     });
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/detailed-report") {
+    const clientIp = extractClientIp(req);
+    const visitorId = ensureVisitorCookie(req, res);
+    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
+
+    const reportState = getDailyLimitState(reportLimitStore, userKey);
+    if (reportState.count >= 3) {
+      respondJson(req, res, 429, { requestId, message: "詳細レポートの1日あたりの上限（3回）に達しました。" });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 4);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    if (!body.patent || !body.scores) {
+      respondJson(req, res, 400, { requestId, message: "patent and scores are required" });
+      return;
+    }
+
+    try {
+      reportState.count += 1;
+      const result = await generateDetailedReport(body);
+      respondJson(req, res, 200, { requestId, ...result });
+      logRequest({ requestId, type: "detailed_report", user: userKey, source: result.source });
+    } catch (error) {
+      respondJson(req, res, 500, { requestId, message: "レポート生成に失敗しました。" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/send-report") {
+    const clientIp = extractClientIp(req);
+    const visitorId = ensureVisitorCookie(req, res);
+    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
+
+    const emailState = getDailyLimitState(emailLimitStore, userKey);
+    if (emailState.count >= 3) {
+      respondJson(req, res, 429, { requestId, message: "メール送信の1日あたりの上限（3通）に達しました。" });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 4);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    const email = String(body.email || "").trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" });
+      return;
+    }
+
+    if (!body.reportData) {
+      respondJson(req, res, 400, { requestId, message: "reportData is required" });
+      return;
+    }
+
+    try {
+      emailState.count += 1;
+      const result = await sendResultEmail({
+        email,
+        name: String(body.name || ""),
+        reportData: body.reportData
+      });
+      respondJson(req, res, 200, { requestId, message: "メールを送信しました。", emailId: result.id });
+      logRequest({ requestId, type: "send_report", user: userKey });
+    } catch (error) {
+      console.error("[mailer] error:", error.message);
+      respondJson(req, res, 500, { requestId, message: "メール送信に失敗しました。" });
+    }
     return;
   }
 
@@ -778,9 +685,9 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       metrics.errors4xx += 1;
       if (error.message === "payload_too_large") {
-        sendJson(req, res, 413, { requestId, message: "payload too large" });
+        respondJson(req, res, 413, { requestId, message: "payload too large" });
       } else {
-        sendJson(req, res, 400, { requestId, message: "invalid request body" });
+        respondJson(req, res, 400, { requestId, message: "invalid request body" });
       }
       return;
     }
@@ -788,7 +695,7 @@ const server = http.createServer(async (req, res) => {
     const validated = validateQuery(body.query);
     if (!validated.ok) {
       metrics.errors4xx += 1;
-      sendJson(req, res, 400, { requestId, message: validated.message });
+      respondJson(req, res, 400, { requestId, message: validated.message });
       return;
     }
 
@@ -811,7 +718,7 @@ const server = http.createServer(async (req, res) => {
         response.captchaSiteKey = TURNSTILE_SITE_KEY;
       }
 
-      sendJson(req, res, 429, response);
+      respondJson(req, res, 429, response);
       logRequest({
         requestId,
         type: "quota_block",
@@ -826,7 +733,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const diagnosis = await getDiagnosis(validated.text, requestId);
       metrics.diagnoseAllowed += 1;
-      sendJson(req, res, 200, {
+      respondJson(req, res, 200, {
         requestId,
         ...diagnosis,
         quota: quota.quota
@@ -846,7 +753,7 @@ const server = http.createServer(async (req, res) => {
         metrics.errors5xx += 1;
         metrics.diagnoseBlocked += 1;
         incrementBlockedReason("global_budget_exceeded");
-        sendJson(req, res, 503, {
+        respondJson(req, res, 503, {
           requestId,
           reason: "global_budget_exceeded",
           message: "service is in degraded mode"
@@ -857,7 +764,7 @@ const server = http.createServer(async (req, res) => {
 
       if (error.message === "upstream_timeout") {
         metrics.errors5xx += 1;
-        sendJson(req, res, 504, {
+        respondJson(req, res, 504, {
           requestId,
           message: "upstream timeout"
         });
@@ -866,7 +773,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       metrics.errors5xx += 1;
-      sendJson(req, res, 500, {
+      respondJson(req, res, 500, {
         requestId,
         message: "diagnose failed"
       });

@@ -1,9 +1,12 @@
 {
   "name": "patent-revenue-mvp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Patent Value Check mock: patent number diagnosis to prefilled registration",
   "scripts": {
     "start": "node server.js"
+  },
+  "dependencies": {
+    "resend": "^4.0.0"
   }
 }

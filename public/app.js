@@ -217,10 +217,22 @@ function getCategoryBase(category) {
   return benchmark[category] || benchmark.default;
 }
 
-function getRank(score) {
-  if (score >= 80) return "A";
-  if (score >= 65) return "B";
-  if (score >= 50) return "C";
+const rankMessages = {
+  A: "ライセンス・売却できる可能性がとても高い",
+  B: "ライセンス・売却できる可能性が高い",
+  C: "ライセンス・売却できる可能性がある",
+  D: "ライセンス・売却できる可能性が低い"
+};
+
+function getRank(scores, input) {
+  const fullCoverage = scores.breadth >= 70 && scores.strength >= 60;
+  const partialCoverage = scores.breadth >= 40;
+  const salesOver10b = input.salesRange === "gt10b";
+  const salesOver1b = input.salesRange === "1b_10b" || input.salesRange === "gt10b";
+
+  if (fullCoverage && salesOver10b) return "A";
+  if (fullCoverage && salesOver1b) return "B";
+  if (partialCoverage) return "C";
   return "D";
 }
 
@@ -358,7 +370,7 @@ function computeScores(patent, input) {
 
   return {
     total,
-    rank: getRank(total),
+    rank: getRank({ breadth, strength, monetization, impact }, input),
     impact,
     breadth,
     strength,
@@ -505,7 +517,8 @@ function renderResult(result) {
   appendChildren(scoreEl, [
     createNode("p", { className: "score-label", text: "Patent Value Score" }),
     createNode("p", { className: "score-main", text: String(score.total) }),
-    createNode("p", { className: "rank", text: `ランク ${score.rank} / 信頼度 ${valueRange.confidence}` })
+    createNode("p", { className: "rank", text: `ランク ${score.rank} / 信頼度 ${valueRange.confidence}` }),
+    createNode("p", { className: "rank-message", text: rankMessages[score.rank] || "" })
   ]);
 
   const officialLinkRow = createNode("p", { className: "small" });
@@ -563,6 +576,136 @@ function renderResult(result) {
 
   joinLink.href = buildJoinUrl(result);
   ctaNote.textContent = "登録導線には source=patent-value-check と診断IDを付与します。";
+}
+
+async function fetchDetailedReport(result) {
+  const reportBtn = document.getElementById("detailed-report-btn");
+  const reportSection = document.getElementById("detailed-report");
+  if (!reportBtn || !reportSection) return;
+
+  reportBtn.disabled = true;
+  reportBtn.textContent = "レポート生成中...";
+
+  try {
+    const response = await fetch("/api/detailed-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        patent: result.patent,
+        scores: result.scores,
+        input: result.input,
+        valueRange: result.valueRange,
+        route: result.route
+      })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.message || "レポート生成に失敗しました。");
+    }
+
+    const report = await response.json();
+    renderDetailedReport(report, reportSection);
+    reportSection.classList.remove("hidden");
+    reportSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    trackEvent("detailed_report_generated", { result_id: result.resultId });
+  } catch (error) {
+    showSystemMessage(error.message || "詳細レポートの取得に失敗しました。", "error");
+  } finally {
+    reportBtn.disabled = false;
+    reportBtn.textContent = "詳細レポートを生成";
+  }
+}
+
+function renderDetailedReport(report, container) {
+  const sections = [
+    { title: "発明の概要", key: "summary" },
+    { title: "強み・優位性", key: "strengths" },
+    { title: "ライセンス可能分野", key: "licensableFields" },
+    { title: "想定ロイヤルティ率", key: "royaltyRate" },
+    { title: "ライセンス可能額の目安", key: "valueBracket" },
+    { title: "収益化手段", key: "monetizationMethods" },
+    { title: "次の一手", key: "nextSteps" }
+  ];
+
+  const children = [createNode("h3", { text: "詳細評価レポート" })];
+
+  sections.forEach((sec) => {
+    const content = report.report?.[sec.key] || report[sec.key] || "（データなし）";
+    const card = createNode("div", { className: "report-section" });
+    card.appendChild(createNode("h4", { text: sec.title }));
+    const body = createNode("p");
+    body.textContent = typeof content === "string" ? content : JSON.stringify(content);
+    card.appendChild(body);
+    children.push(card);
+  });
+
+  appendChildren(container, children);
+}
+
+async function sendReportEmail() {
+  const emailInput = document.getElementById("report-email");
+  const nameInput = document.getElementById("report-name");
+  const privacyCheck = document.getElementById("privacy-agree");
+  const sendBtn = document.getElementById("send-report-btn");
+
+  if (!emailInput || !sendBtn) return;
+
+  const email = emailInput.value.trim();
+  const name = nameInput ? nameInput.value.trim() : "";
+
+  if (!email) {
+    showSystemMessage("メールアドレスを入力してください。", "warn");
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    showSystemMessage("有効なメールアドレスを入力してください。", "warn");
+    return;
+  }
+
+  if (privacyCheck && !privacyCheck.checked) {
+    showSystemMessage("プライバシーポリシーに同意してください。", "warn");
+    return;
+  }
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = "送信中...";
+
+  try {
+    const response = await fetch("/api/send-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        email,
+        name,
+        resultId: latestResult?.resultId,
+        reportData: {
+          patent: latestResult?.patent,
+          scores: latestResult?.scores,
+          valueRange: latestResult?.valueRange,
+          route: latestResult?.route,
+          rank: latestResult?.scores?.rank,
+          rankMessage: rankMessages[latestResult?.scores?.rank] || ""
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.message || "送信に失敗しました。");
+    }
+
+    showSystemMessage("診断結果をメールで送信しました。", "warn");
+    trackEvent("report_email_sent", { result_id: latestResult?.resultId });
+  } catch (error) {
+    showSystemMessage(error.message || "メール送信に失敗しました。", "error");
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.textContent = "結果をメールで受け取る";
+  }
 }
 
 function showResultScreen() {
@@ -682,5 +825,17 @@ reportSignupBtn.addEventListener("click", () => {
 });
 
 backToInputBtn.addEventListener("click", showInputScreen);
+
+const detailedReportBtn = document.getElementById("detailed-report-btn");
+if (detailedReportBtn) {
+  detailedReportBtn.addEventListener("click", () => {
+    if (latestResult) fetchDetailedReport(latestResult);
+  });
+}
+
+const sendReportBtn = document.getElementById("send-report-btn");
+if (sendReportBtn) {
+  sendReportBtn.addEventListener("click", sendReportEmail);
+}
 
 trackEvent("lp_view", { page: "home" });

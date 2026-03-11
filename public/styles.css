@@ -590,6 +590,113 @@ h3 {
   gap: 8px;
 }
 
+/* --- Detailed Report --- */
+
+.detailed-report-area {
+  margin-top: 16px;
+}
+
+.detailed-report-area .btn {
+  width: 100%;
+}
+
+#detailed-report {
+  margin-top: 12px;
+}
+
+.report-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.report-section:last-child {
+  border-bottom: 0;
+}
+
+.report-section h4 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.report-section p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.rank-message {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* --- Email Form --- */
+
+.email-form-area {
+  margin-top: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.email-form-area h3 {
+  margin-bottom: 12px;
+}
+
+.email-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.email-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.email-form input[type="email"],
+.email-form input[type="text"] {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.email-form input[type="email"]:focus,
+.email-form input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13, 115, 103, 0.1);
+}
+
+.checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px !important;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.required {
+  color: var(--danger);
+}
+
 /* --- FAQ --- */
 
 details {
