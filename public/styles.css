@@ -1,23 +1,24 @@
 :root {
-  --bg: #f8f9fb;
+  --bg: #dee7f9;
   --surface: #ffffff;
-  --ink: #1e2a3a;
-  --ink-soft: #5a6577;
-  --ink-muted: #8892a0;
-  --line: rgba(30, 42, 58, 0.12);
-  --line-strong: rgba(30, 42, 58, 0.22);
+  --ink: #333333;
+  --ink-soft: #555555;
+  --ink-muted: #6b7a99;
+  --line: rgba(51, 71, 142, 0.15);
+  --line-strong: rgba(51, 71, 142, 0.25);
   --panel: rgba(255, 255, 255, 0.97);
-  --primary: #1a3550;
-  --primary-hover: #244a6b;
-  --accent: #0d7367;
-  --accent-soft: rgba(13, 115, 103, 0.08);
+  --primary: #33478e;
+  --primary-hover: #3d54a3;
+  --accent: #1176d4;
+  --accent-soft: rgba(17, 118, 212, 0.08);
   --warn: #a35a00;
   --warn-bg: #fff8ef;
   --danger: #b02323;
+  --footer-bg: #1f266b;
   --radius: 8px;
   --radius-lg: 12px;
-  --shadow-sm: 0 1px 3px rgba(30, 42, 58, 0.06);
-  --shadow-md: 0 4px 16px rgba(30, 42, 58, 0.08);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
 *,
@@ -30,7 +31,7 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--bg);
-  font-family: "Noto Sans JP", sans-serif;
+  font-family: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif;
   font-size: 15px;
   line-height: 1.7;
   -webkit-font-smoothing: antialiased;
@@ -196,7 +197,7 @@ h3 {
 .hero-form input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(13, 115, 103, 0.1);
+  box-shadow: 0 0 0 3px rgba(17, 118, 212, 0.15);
 }
 
 .hero-form input::placeholder {
@@ -250,7 +251,7 @@ h3 {
 .extra-fields select:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(13, 115, 103, 0.1);
+  box-shadow: 0 0 0 3px rgba(17, 118, 212, 0.15);
 }
 
 /* --- Sample Card --- */
@@ -258,7 +259,7 @@ h3 {
 .sample-card {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: linear-gradient(155deg, #ffffff 0%, #f3f8f7 100%);
+  background: linear-gradient(155deg, #ffffff 0%, #e8f0fe 50%, #d8ffff 100%);
   padding: 20px;
   box-shadow: var(--shadow-sm);
 }
@@ -323,7 +324,7 @@ h3 {
   border: 0;
   border-radius: var(--radius);
   cursor: pointer;
-  font-family: "Noto Sans JP", sans-serif;
+  font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif;
   font-size: 15px;
   font-weight: 700;
   text-decoration: none;
@@ -344,6 +345,7 @@ h3 {
 .btn-primary:hover {
   background: var(--primary-hover);
   box-shadow: var(--shadow-md);
+  filter: brightness(1.15);
 }
 
 .btn-ghost {
@@ -444,7 +446,7 @@ h3 {
 
 .logic-card h3 {
   font-size: 14px;
-  font-family: "Noto Sans JP", sans-serif;
+  font-family: "Noto Serif JP", "Hiragino Mincho ProN", serif;
   font-weight: 700;
   color: var(--primary);
   margin-bottom: 4px;
@@ -464,7 +466,7 @@ h3 {
   color: var(--ink-soft);
   background: var(--bg);
   border-radius: 6px;
-  border-left: 3px solid var(--line-strong);
+  border-left: 3px solid var(--primary);
 }
 
 /* --- System Messages --- */
@@ -523,7 +525,7 @@ h3 {
 }
 
 .score-card {
-  background: linear-gradient(155deg, #ffffff 0%, #f0f7f5 100%);
+  background: linear-gradient(155deg, #ffffff 0%, #e8f0fe 50%, #d8ffff 100%);
 }
 
 .score-main {
@@ -576,7 +578,7 @@ h3 {
 
 .benefit-box {
   margin-top: 12px;
-  background: linear-gradient(155deg, #ffffff 0%, #f3f8f7 100%);
+  background: linear-gradient(155deg, #ffffff 0%, #e8f0fe 50%, #d8ffff 100%);
 }
 
 .cta-stack {
@@ -678,7 +680,7 @@ h3 {
 .email-form input[type="text"]:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(13, 115, 103, 0.1);
+  box-shadow: 0 0 0 3px rgba(17, 118, 212, 0.15);
 }
 
 .checkbox-label {
