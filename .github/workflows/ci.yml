@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: node --check server.js && node --check lib/*.js
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high || true
+
+      - name: Smoke test - server starts
+        run: |
+          timeout 5 node server.js &
+          sleep 2
+          curl -sf http://localhost:3000/ > /dev/null
+          echo "Server started successfully"
+        env:
+          PORT: 3000
+          NODE_ENV: test
+          HASH_SECRET: ci-test-secret

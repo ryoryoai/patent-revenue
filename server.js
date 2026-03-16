@@ -1,3 +1,4 @@
+require("dotenv").config();
 const http = require("http");
 const https = require("https");
 const path = require("path");
@@ -512,10 +513,13 @@ async function getDiagnosis(query, requestId) {
     inFlight.set(cacheKey, runner);
   }
 
-  const patent = await Promise.race([
+  const rawPatent = await Promise.race([
     runner,
     new Promise((_, reject) => setTimeout(() => reject(new Error("upstream_timeout")), REQUEST_TIMEOUT_MS))
   ]);
+
+  // _jpoRaw はサーバー内部用なのでクライアントには返さない
+  const { _jpoRaw, ...patent } = rawPatent;
 
   return {
     resultId: `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
