@@ -227,10 +227,10 @@ const rankMessages = {
 function getRank(scores, input) {
   const fullCoverage = scores.breadth >= 70 && scores.strength >= 60;
   const partialCoverage = scores.breadth >= 40;
-  const salesOver10b = input.salesRange === "gt10b";
-  const salesOver1b = input.salesRange === "1b_10b" || input.salesRange === "gt10b";
+  const salesOver100b = input.salesRange === "gt10b";
+  const salesOver1b = input.salesRange === "100m_1b" || input.salesRange === "1b_10b" || input.salesRange === "gt10b";
 
-  if (fullCoverage && salesOver10b) return "A";
+  if (fullCoverage && salesOver100b) return "A";
   if (fullCoverage && salesOver1b) return "B";
   if (partialCoverage) return "C";
   return "D";

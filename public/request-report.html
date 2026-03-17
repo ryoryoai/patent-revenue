@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>詳細評価レポート申請 | PatentRevenue</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: #dee7f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #33478e;
+      padding: 20px 24px;
+      text-align: center;
+    }
+    header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.05em;
+    }
+    header p {
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      margin-top: 4px;
+    }
+    main {
+      flex: 1;
+      max-width: 520px;
+      margin: 32px auto;
+      padding: 0 16px;
+      width: 100%;
+    }
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      border: 1px solid rgba(51,71,142,0.15);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      padding: 28px 24px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #33478e;
+      margin-bottom: 12px;
+    }
+    .card p {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.8;
+      margin-bottom: 8px;
+    }
+    .note {
+      background: #f5f6fa;
+      border-radius: 6px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      border-left: 3px solid #33478e;
+    }
+    .note p {
+      font-size: 13px;
+      color: #6b7a99;
+      margin: 0;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 6px;
+      margin-top: 16px;
+    }
+    input[type="email"],
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #ccd3e0;
+      border-radius: 6px;
+      font-size: 15px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      outline: none;
+      border-color: #33478e;
+      box-shadow: 0 0 0 3px rgba(51,71,142,0.1);
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      margin-top: 24px;
+      background: #33478e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #283a7a; }
+    .btn:disabled { background: #9aa3c0; cursor: not-allowed; }
+    .status {
+      text-align: center;
+      padding: 16px;
+      border-radius: 8px;
+      margin-top: 16px;
+      font-size: 14px;
+      line-height: 1.6;
+      display: none;
+    }
+    .status.success { display: block; background: #e8f5e9; color: #2e7d32; }
+    .status.error { display: block; background: #fce4ec; color: #c62828; }
+    .status.loading { display: block; background: #e3f2fd; color: #1565c0; }
+    .steps {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+    }
+    .steps li {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      font-size: 14px;
+      color: #555;
+      line-height: 1.6;
+    }
+    .steps li::before {
+      counter-increment: step;
+      content: counter(step);
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #dee7f9;
+      color: #33478e;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 24px;
+      margin-right: 10px;
+      margin-top: 1px;
+    }
+    footer {
+      background: #1f266b;
+      padding: 24px 16px;
+      text-align: center;
+    }
+    footer p { font-size: 11px; color: rgba(255,255,255,0.5); }
+    footer a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PatentRevenue</h1>
+    <p>知財を収益に変える</p>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>詳細評価レポートの申請</h2>
+      <p>PatentRevenueに登録済みの特許について、AIによる詳細評価レポートを作成いたします。</p>
+
+      <div class="note">
+        <p>※詳細評価レポートの申請には、PatentRevenueへの特許の登録が必須です。未登録の方は<a href="https://patent-revenue.iprich.jp/#licence" style="color:#33478e;font-weight:500;">こちら</a>から先に特許を登録してください。</p>
+      </div>
+
+      <form id="request-form">
+        <label for="email">メールアドレス（簡易評価時に登録したもの）</label>
+        <input type="email" id="email" name="email" required placeholder="example@email.com" />
+
+        <label for="patent-id">特許番号</label>
+        <input type="text" id="patent-id" name="patentId" required placeholder="例: 7091234" />
+
+        <button type="submit" class="btn" id="submit-btn">詳細レポートを申請する</button>
+      </form>
+
+      <div id="status" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>申請の流れ</h2>
+      <ol class="steps">
+        <li>特許番号とメールアドレスを入力して申請</li>
+        <li>AIが特許の詳細評価を実施（数分〜10分程度）</li>
+        <li>完了後、メールアドレスに詳細評価レポートをお届け</li>
+      </ol>
+    </div>
+  </main>
+
+  <footer>
+    <p><a href="https://patent-revenue.iprich.jp/">サービス概要</a> | <a href="https://patent-revenue.iprich.jp/privacy">プライバシーポリシー</a></p>
+    <p style="margin-top:8px;">&copy; 2026 iprich Inc.</p>
+  </footer>
+
+  <script>
+    const form = document.getElementById("request-form");
+    const statusEl = document.getElementById("status");
+    const submitBtn = document.getElementById("submit-btn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = form.email.value.trim();
+      const patentId = form.patentId.value.trim();
+
+      if (!email || !patentId) return;
+
+      submitBtn.disabled = true;
+      statusEl.className = "status loading";
+      statusEl.textContent = "申請を送信中...";
+
+      try {
+        const res = await fetch("/api/request-detailed-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, patentId })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          statusEl.className = "status success";
+          statusEl.textContent = data.message || "申請を受け付けました。評価完了後にメールでレポートをお届けします。";
+          form.reset();
+        } else {
+          statusEl.className = "status error";
+          statusEl.textContent = data.message || "申請に失敗しました。";
+        }
+      } catch (err) {
+        statusEl.className = "status error";
+        statusEl.textContent = "通信エラーが発生しました。しばらくしてからお試しください。";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

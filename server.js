@@ -17,8 +17,9 @@ const {
   sendJson
 } = require("./lib/http-utils");
 const { generateDetailedReport } = require("./lib/llm");
-const { sendResultEmail } = require("./lib/mailer");
+const { sendResultEmail, sendDetailedReportEmail } = require("./lib/mailer");
 const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
+const { investigateAndRank, isV2Available } = require("./lib/v2-client");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -595,6 +596,215 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // V2パイプラインで簡易評価（構成要件充足判定）を実行
+  // 非同期: 調査開始→バックグラウンドでポーリング→完了時メール送信
+  if (req.method === "POST" && req.url === "/api/evaluate") {
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 2);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    const patentId = String(body.patentId || "").trim();
+    if (!patentId) {
+      respondJson(req, res, 400, { requestId, message: "patentId is required" });
+      return;
+    }
+
+    const email = String(body.email || "").trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" });
+      return;
+    }
+
+    const name = String(body.name || "");
+
+    // V2が利用可能かチェック
+    const v2Ready = await isV2Available();
+    if (!v2Ready) {
+      respondJson(req, res, 503, { requestId, message: "評価サービスが現在利用できません。しばらくしてからお試しください。" });
+      return;
+    }
+
+    // 即座にレスポンスを返し、バックグラウンドで調査実行
+    respondJson(req, res, 202, {
+      requestId,
+      message: "評価を開始しました。完了後にメールでお知らせします。",
+      patentId
+    });
+
+    // バックグラウンド処理
+    (async () => {
+      try {
+        const result = await investigateAndRank(patentId, {
+          pipeline: body.pipeline || "C"
+        });
+
+        // 簡易評価メール送信
+        await sendResultEmail({
+          email,
+          name,
+          reportData: {
+            rank: result.rank,
+            name
+          }
+        });
+
+        logRequest({
+          requestId,
+          type: "v2_evaluate_complete",
+          patentId,
+          rank: result.rank,
+          reason: result.reason,
+          jobId: result.jobId
+        });
+      } catch (error) {
+        console.error("[v2-evaluate] error:", error.message);
+        logRequest({
+          requestId,
+          type: "v2_evaluate_error",
+          patentId,
+          error: error.message
+        });
+      }
+    })();
+
+    return;
+  }
+
+  // V2パイプラインのステータス確認
+  if (req.method === "GET" && req.url === "/api/v2-status") {
+    const available = await isV2Available();
+    respondJson(req, res, 200, { requestId, v2Available: available });
+    return;
+  }
+
+  // 詳細レポート申請 (request-report.htmlから呼ばれる)
+  // V2パイプラインで調査→詳細レポート生成→メール送信
+  if (req.method === "POST" && req.url === "/api/request-detailed-report") {
+    const clientIp = extractClientIp(req);
+    const visitorId = ensureVisitorCookie(req, res);
+    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
+
+    const emailState = getDailyLimitState(emailLimitStore, userKey);
+    if (emailState.count >= 3) {
+      respondJson(req, res, 429, { requestId, message: "1日あたりの上限（3回）に達しました。" });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 2);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    const email = String(body.email || "").trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" });
+      return;
+    }
+
+    const patentId = String(body.patentId || "").trim();
+    if (!patentId) {
+      respondJson(req, res, 400, { requestId, message: "特許番号を入力してください。" });
+      return;
+    }
+
+    const name = String(body.name || "");
+
+    // 即座にレスポンスを返す
+    respondJson(req, res, 202, {
+      requestId,
+      message: "申請を受け付けました。評価完了後にメールでレポートをお届けします。",
+      patentId
+    });
+
+    emailState.count += 1;
+
+    // バックグラウンドで V2調査→詳細レポート生成→メール送信
+    (async () => {
+      try {
+        // 1. 特許情報の取得
+        const patent = await lookupPatent(patentId);
+
+        // 2. V2パイプラインで構成要件充足判定（利用可能な場合）
+        let v2Result = null;
+        const v2Ready = await isV2Available();
+        if (v2Ready) {
+          try {
+            v2Result = await investigateAndRank(patentId);
+          } catch (err) {
+            console.warn("[request-detailed-report] V2 investigation failed:", err.message);
+          }
+        }
+
+        // 3. スコア算出（V2結果があればそちらを使用）
+        const scores = {
+          impact: patent.metrics ? Math.min(100, Math.round((patent.metrics.citations || 0) * 2.5)) : 50,
+          breadth: patent.metrics ? Math.min(100, Math.round((patent.metrics.claimCount || 0) * 6 + (patent.metrics.familySize || 0) * 5)) : 50,
+          strength: patent.metrics ? Math.min(100, Math.round((patent.metrics.classRank || 50))) : 50,
+          monetization: patent.metrics ? Math.min(100, Math.round((patent.metrics.marketPlayers || 0) * 3)) : 50
+        };
+        scores.total = Math.round((scores.impact + scores.breadth + scores.strength + scores.monetization) / 4);
+        scores.rank = v2Result ? v2Result.rank : (scores.total >= 75 ? "A" : scores.total >= 55 ? "B" : scores.total >= 35 ? "C" : "D");
+
+        const valueRange = {
+          low: scores.total * 100000,
+          high: scores.total * 1500000,
+          confidence: scores.total >= 70 ? "高" : scores.total >= 50 ? "中" : "低"
+        };
+        const route = { title: scores.monetization >= 60 ? "ライセンス向き" : "調査強化推奨" };
+
+        // 4. 詳細レポート生成 (OpenAI)
+        const reportResult = await generateDetailedReport({
+          patent,
+          scores,
+          input: {},
+          valueRange,
+          route
+        });
+
+        // 5. 詳細レポートメール送信
+        await sendDetailedReportEmail({
+          email,
+          name,
+          reportData: {
+            patent,
+            scores,
+            valueRange,
+            route,
+            rank: scores.rank,
+            rankMessage: { A: "ライセンス・売却できる可能性がとても高い", B: "ライセンス・売却できる可能性が高い", C: "ライセンス・売却できる可能性がある", D: "ライセンス・売却できる可能性が低い" }[scores.rank] || "",
+            report: reportResult.report
+          }
+        });
+
+        logRequest({
+          requestId,
+          type: "request_detailed_report_complete",
+          patentId,
+          rank: scores.rank,
+          v2Used: !!v2Result,
+          reportSource: reportResult.source
+        });
+      } catch (error) {
+        console.error("[request-detailed-report] error:", error.message);
+        logRequest({
+          requestId,
+          type: "request_detailed_report_error",
+          patentId,
+          error: error.message
+        });
+      }
+    })();
+
+    return;
+  }
+
   if (req.method === "POST" && req.url === "/api/detailed-report") {
     const clientIp = extractClientIp(req);
     const visitorId = ensureVisitorCookie(req, res);
@@ -671,6 +881,52 @@ const server = http.createServer(async (req, res) => {
       logRequest({ requestId, type: "send_report", user: userKey });
     } catch (error) {
       console.error("[mailer] error:", error.message);
+      respondJson(req, res, 500, { requestId, message: "メール送信に失敗しました。" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/send-detailed-report") {
+    const clientIp = extractClientIp(req);
+    const visitorId = ensureVisitorCookie(req, res);
+    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
+
+    const emailState = getDailyLimitState(emailLimitStore, userKey);
+    if (emailState.count >= 3) {
+      respondJson(req, res, 429, { requestId, message: "メール送信の1日あたりの上限（3通）に達しました。" });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 8);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    const email = String(body.email || "").trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" });
+      return;
+    }
+
+    if (!body.reportData || !body.reportData.report) {
+      respondJson(req, res, 400, { requestId, message: "reportData with report is required" });
+      return;
+    }
+
+    try {
+      emailState.count += 1;
+      const result = await sendDetailedReportEmail({
+        email,
+        name: String(body.name || ""),
+        reportData: body.reportData
+      });
+      respondJson(req, res, 200, { requestId, message: "詳細評価レポートメールを送信しました。", emailId: result.id });
+      logRequest({ requestId, type: "send_detailed_report", user: userKey });
+    } catch (error) {
+      console.error("[mailer] detailed report error:", error.message);
       respondJson(req, res, 500, { requestId, message: "メール送信に失敗しました。" });
     }
     return;
