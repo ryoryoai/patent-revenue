@@ -19,7 +19,7 @@ const {
 const { generateDetailedReport } = require("./lib/llm");
 const { sendResultEmail, sendDetailedReportEmail } = require("./lib/mailer");
 const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
-const { investigateAndRank, isV2Available } = require("./lib/v2-client");
+const { researchPatent } = require("./lib/patent-research");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -725,61 +725,24 @@ const server = http.createServer(async (req, res) => {
 
     emailState.count += 1;
 
-    // バックグラウンドで V2調査→詳細レポート生成→メール送信
+    // バックグラウンドで JPO API→2層評価→LLMレポート→メール送信
     (async () => {
       try {
-        // 1. 特許情報の取得
-        const patent = await lookupPatent(patentId);
+        // 2層構成リサーチエンジンで包括的評価
+        const result = await researchPatent(patentId, { name });
 
-        // 2. V2パイプラインで構成要件充足判定（利用可能な場合）
-        let v2Result = null;
-        const v2Ready = await isV2Available();
-        if (v2Ready) {
-          try {
-            v2Result = await investigateAndRank(patentId);
-          } catch (err) {
-            console.warn("[request-detailed-report] V2 investigation failed:", err.message);
-          }
-        }
-
-        // 3. スコア算出（V2結果があればそちらを使用）
-        const scores = {
-          impact: patent.metrics ? Math.min(100, Math.round((patent.metrics.citations || 0) * 2.5)) : 50,
-          breadth: patent.metrics ? Math.min(100, Math.round((patent.metrics.claimCount || 0) * 6 + (patent.metrics.familySize || 0) * 5)) : 50,
-          strength: patent.metrics ? Math.min(100, Math.round((patent.metrics.classRank || 50))) : 50,
-          monetization: patent.metrics ? Math.min(100, Math.round((patent.metrics.marketPlayers || 0) * 3)) : 50
-        };
-        scores.total = Math.round((scores.impact + scores.breadth + scores.strength + scores.monetization) / 4);
-        scores.rank = v2Result ? v2Result.rank : (scores.total >= 75 ? "A" : scores.total >= 55 ? "B" : scores.total >= 35 ? "C" : "D");
-
-        const valueRange = {
-          low: scores.total * 100000,
-          high: scores.total * 1500000,
-          confidence: scores.total >= 70 ? "高" : scores.total >= 50 ? "中" : "低"
-        };
-        const route = { title: scores.monetization >= 60 ? "ライセンス向き" : "調査強化推奨" };
-
-        // 4. 詳細レポート生成 (OpenAI)
-        const reportResult = await generateDetailedReport({
-          patent,
-          scores,
-          input: {},
-          valueRange,
-          route
-        });
-
-        // 5. 詳細レポートメール送信
+        // 詳細レポートメール送信 (PDF添付)
         await sendDetailedReportEmail({
           email,
           name,
           reportData: {
-            patent,
-            scores,
-            valueRange,
-            route,
-            rank: scores.rank,
-            rankMessage: { A: "ライセンス・売却できる可能性がとても高い", B: "ライセンス・売却できる可能性が高い", C: "ライセンス・売却できる可能性がある", D: "ライセンス・売却できる可能性が低い" }[scores.rank] || "",
-            report: reportResult.report
+            patent: result.patent,
+            scores: result.scores,
+            valueRange: result.valueRange,
+            route: { title: result.scores.monetization >= 60 ? "ライセンス向き" : "調査強化推奨" },
+            rank: result.rank,
+            rankMessage: result.rankMessage,
+            report: result.report
           }
         });
 
@@ -787,9 +750,9 @@ const server = http.createServer(async (req, res) => {
           requestId,
           type: "request_detailed_report_complete",
           patentId,
-          rank: scores.rank,
-          v2Used: !!v2Result,
-          reportSource: reportResult.source
+          rank: result.rank,
+          reportSource: result.source,
+          category: result.royaltyRange.category
         });
       } catch (error) {
         console.error("[request-detailed-report] error:", error.message);
