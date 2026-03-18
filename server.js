@@ -545,7 +545,7 @@ function logRequest(info) {
   );
 }
 
-const server = http.createServer(async (req, res) => {
+async function handler(req, res) {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
   applySecurityHeaders(req, res, requestId);
@@ -1017,8 +1017,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   sendFile(res, filePath);
-});
+}
 
-server.listen(port, () => {
-  console.log(`Patent Value Check running at http://localhost:${port}`);
-});
+// ローカル開発: listen / Vercel: export
+if (!process.env.VERCEL) {
+  const server = http.createServer(handler);
+  server.listen(port, () => {
+    console.log(`Patent Value Check running at http://localhost:${port}`);
+  });
+}
+
+module.exports = handler;
