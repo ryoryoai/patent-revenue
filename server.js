@@ -16,7 +16,6 @@ const {
   sendFile,
   sendJson
 } = require("./lib/http-utils");
-const { generateDetailedReport } = require("./lib/llm");
 const { sendResultEmail, sendDetailedReportEmail } = require("./lib/mailer");
 const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
 const { researchPatent } = require("./lib/patent-research");
@@ -742,7 +741,8 @@ const server = http.createServer(async (req, res) => {
             route: { title: result.scores.monetization >= 60 ? "ライセンス向き" : "調査強化推奨" },
             rank: result.rank,
             rankMessage: result.rankMessage,
-            report: result.report
+            report: result.report,
+            structured: result.structured
           }
         });
 
@@ -787,15 +787,16 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (!body.patent || !body.scores) {
-      respondJson(req, res, 400, { requestId, message: "patent and scores are required" });
+    const patentId = body.patentId || body.patent?.id || "";
+    if (!patentId) {
+      respondJson(req, res, 400, { requestId, message: "patentId is required" });
       return;
     }
 
     try {
       reportState.count += 1;
-      const result = await generateDetailedReport(body);
-      respondJson(req, res, 200, { requestId, ...result });
+      const result = await researchPatent(patentId, { name: body.name || "" });
+      respondJson(req, res, 200, { requestId, report: result.report, structured: result.structured, source: result.source });
       logRequest({ requestId, type: "detailed_report", user: userKey, source: result.source });
     } catch (error) {
       respondJson(req, res, 500, { requestId, message: "レポート生成に失敗しました。" });
