@@ -303,8 +303,14 @@ async function fetchPatentInfoFallback(query) {
   return response;
 }
 
-async function fetchPatentInfo(query, challengeToken = "") {
-  const body = JSON.stringify({ query, captchaToken: challengeToken || undefined });
+async function fetchPatentInfo(query, challengeToken = "", leadFields = {}) {
+  const body = JSON.stringify({
+    query,
+    captchaToken: challengeToken || undefined,
+    name: leadFields.name || undefined,
+    company: leadFields.company || undefined,
+    email: leadFields.email || undefined
+  });
   let response;
 
   try {
@@ -682,6 +688,7 @@ async function sendReportEmail() {
         email,
         name,
         resultId: latestResult?.resultId,
+        leadId: latestResult?.leadId || undefined,
         reportData: {
           patent: latestResult?.patent,
           scores: latestResult?.scores,
@@ -721,6 +728,10 @@ function showInputScreen() {
 diagnosisForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
+  const leadName = document.getElementById("lead-name")?.value?.trim() || "";
+  const leadCompany = document.getElementById("lead-company")?.value?.trim() || "";
+  const leadEmail = document.getElementById("lead-email")?.value?.trim() || "";
+
   const fd = new FormData(diagnosisForm);
   const input = {
     query: String(fd.get("query") || "").trim(),
@@ -745,7 +756,11 @@ diagnosisForm.addEventListener("submit", async (event) => {
   });
 
   try {
-    const diagnosis = await fetchPatentInfo(input.query, captchaToken);
+    const diagnosis = await fetchPatentInfo(input.query, captchaToken, {
+      name: leadName,
+      company: leadCompany,
+      email: leadEmail
+    });
     captchaToken = "";
     if (turnstileWidgetId !== null && window.turnstile) {
       window.turnstile.reset(turnstileWidgetId);
@@ -780,11 +795,18 @@ diagnosisForm.addEventListener("submit", async (event) => {
       scores,
       valueRange,
       route,
-      meta: diagnosis.meta || {}
+      meta: diagnosis.meta || {},
+      leadId: diagnosis.leadId || null
     };
 
     renderResult(latestResult);
     showResultScreen();
+
+    // 結果表示後にメールフォームをプリフィル
+    const reportEmail = document.getElementById("report-email");
+    const reportName = document.getElementById("report-name");
+    if (reportEmail && leadEmail) reportEmail.value = leadEmail;
+    if (reportName && leadName) reportName.value = leadName;
 
     trackEvent("diagnosis_success", {
       result_id: latestResult.resultId,

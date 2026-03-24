@@ -21,6 +21,7 @@ const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
 const { researchPatent, PatentInvalidError } = require("./lib/patent-research");
 const { fetchPatentStatus } = require("./lib/patent-api");
 const { saveLead, savePatent, updateLeadStatus } = require("./lib/supabase");
+const { generateAndSaveToken, verifyAndGetData, saveRegistration } = require("./lib/detail-registration");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -909,10 +910,25 @@ async function handler(req, res) {
 
     try {
       emailState.count += 1;
+
+      // リードIDが分かる場合はトークン生成してCTAリンクをメールに追加
+      let tokenUrl;
+      const leadIdForToken = String(body.leadId || "").trim();
+      if (leadIdForToken) {
+        try {
+          const token = await generateAndSaveToken(leadIdForToken);
+          const siteHost = process.env.SITE_HOST || "patent-value-checker.iprich.jp";
+          tokenUrl = `https://${siteHost}/detail-registration.html?t=${token}`;
+        } catch (tokenErr) {
+          console.warn("[send-report] token generation failed:", tokenErr.message);
+        }
+      }
+
       const result = await sendResultEmail({
         email,
         name: String(body.name || ""),
-        reportData: body.reportData
+        reportData: body.reportData,
+        tokenUrl
       });
       respondJson(req, res, 200, { requestId, message: "メールを送信しました。", emailId: result.id });
       logRequest({ requestId, type: "send_report", user: userKey });
@@ -965,6 +981,80 @@ async function handler(req, res) {
     } catch (error) {
       console.error("[mailer] detailed report error:", error.message);
       respondJson(req, res, 500, { requestId, message: "メール送信に失敗しました。" });
+    }
+    return;
+  }
+
+  // 詳細登録: プリフィルデータ取得
+  if (req.method === "GET" && req.url?.startsWith("/api/detail-registration")) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const token = url.searchParams.get("t") || "";
+
+    if (!token) {
+      respondJson(req, res, 400, { requestId, message: "token is required" });
+      return;
+    }
+
+    try {
+      const data = await verifyAndGetData(token);
+      if (!data) {
+        respondJson(req, res, 401, { requestId, message: "invalid or expired token" });
+        return;
+      }
+      respondJson(req, res, 200, { requestId, lead: data.lead });
+    } catch (err) {
+      console.error("[detail-registration] GET error:", err.message);
+      respondJson(req, res, 500, { requestId, message: "サーバーエラーが発生しました。" });
+    }
+    return;
+  }
+
+  // 詳細登録: データ保存
+  if (req.method === "POST" && req.url === "/api/detail-registration") {
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 4);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    const token = String(body.token || "").trim();
+    if (!token) {
+      respondJson(req, res, 400, { requestId, message: "token is required" });
+      return;
+    }
+
+    const type = String(body.type || "").trim();
+    if (!type) {
+      respondJson(req, res, 400, { requestId, message: "type is required" });
+      return;
+    }
+
+    try {
+      const data = await verifyAndGetData(token);
+      if (!data) {
+        respondJson(req, res, 401, { requestId, message: "invalid or expired token" });
+        return;
+      }
+
+      const result = await saveRegistration({
+        tokenId: data.tokenId,
+        leadId: data.leadId,
+        type,
+        fields: body.fields || {}
+      });
+
+      if (!result.success) {
+        respondJson(req, res, 500, { requestId, message: result.message || "登録に失敗しました。" });
+        return;
+      }
+
+      respondJson(req, res, 200, { requestId, message: "詳細情報を受け付けました。" });
+      logRequest({ requestId, type: "detail_registration_saved", regType: type });
+    } catch (err) {
+      console.error("[detail-registration] POST error:", err.message);
+      respondJson(req, res, 500, { requestId, message: "サーバーエラーが発生しました。" });
     }
     return;
   }
@@ -1077,7 +1167,8 @@ async function handler(req, res) {
       respondJson(req, res, 200, {
         requestId,
         ...diagnosis,
-        quota: quota.quota
+        quota: quota.quota,
+        leadId: leadId || undefined
       });
 
       logRequest({

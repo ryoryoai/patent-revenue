@@ -17,7 +17,7 @@
           <section class="hero-text">
             <p class="eyebrow">Patent Value Check</p>
             <h1>その特許、放置したままではもったいない。</h1>
-            <p class="lead">特許番号だけで、価値レンジと収益化の次の一手を最短60秒で概算。<br />個人情報不要。まずは経営判断の入口から。</p>
+            <p class="lead">特許番号と連絡先だけ。最短60秒で価値レンジと収益化の次の一手を概算。</p>
 
             <div class="trust-chips">
               <span class="chip">国内特許のみ対応</span>
@@ -32,10 +32,28 @@
               <div id="captcha-widget"></div>
             </div>
 
-            <form id="diagnosis-form" class="hero-form">
-              <label for="query" class="sr-only">特許番号 / 公開番号 / キーワード</label>
-              <input id="query" name="query" type="text" placeholder="例: 特許第7091234号 / 特開2020-123456 / 画像解析 異常検知" required />
-              <button id="diagnose-btn" type="submit" class="btn btn-primary">無料で診断する</button>
+            <form id="diagnosis-form" class="hero-form-extended">
+              <div class="form-row-2col">
+                <label class="form-field">
+                  <span class="form-label">氏名 <span class="required">*</span></span>
+                  <input id="lead-name" name="name" type="text" placeholder="山田 太郎" required />
+                </label>
+                <label class="form-field">
+                  <span class="form-label">企業名 <span class="required">*</span></span>
+                  <input id="lead-company" name="company" type="text" placeholder="株式会社○○" required />
+                </label>
+              </div>
+              <label class="form-field">
+                <span class="form-label">メールアドレス <span class="required">*</span></span>
+                <input id="lead-email" name="email" type="email" placeholder="example@example.com" required />
+              </label>
+              <div class="form-row-query">
+                <label class="form-field" style="flex:1">
+                  <span class="form-label">特許番号 <span class="required">*</span></span>
+                  <input id="query" name="query" type="text" placeholder="例: 特許第7091234号" required />
+                </label>
+                <button id="diagnose-btn" type="submit" class="btn btn-primary">無料で診断する</button>
+              </div>
             </form>
 
             <button id="toggle-options" class="btn-text" type="button">精度を上げる追加入力</button>

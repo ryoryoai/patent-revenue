@@ -205,6 +205,60 @@ h3 {
   font-size: 13px;
 }
 
+/* --- Extended Hero Form --- */
+.hero-form-extended {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-row-query {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.hero-form-extended input {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  transition: border-color 0.15s;
+}
+
+.hero-form-extended input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(17, 118, 212, 0.15);
+}
+
+.hero-form-extended input::placeholder {
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
 .btn-text {
   margin-top: 8px;
   padding: 0;
@@ -779,6 +833,18 @@ a {
 
   .hero-form {
     flex-direction: column;
+  }
+
+  .form-row-2col {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row-query {
+    flex-direction: column;
+  }
+
+  .form-row-query .btn {
+    width: 100%;
   }
 
   .score-main {
