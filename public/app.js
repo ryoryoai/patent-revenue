@@ -753,6 +753,22 @@ diagnosisForm.addEventListener("submit", async (event) => {
     hideCaptchaChallenge();
 
     const patent = diagnosis.patent;
+
+    // 無効特許の場合はスコア計算せずメッセージ表示
+    if (diagnosis.invalid) {
+      const statusMessages = {
+        "消滅": "この特許は権利が消滅しています。有効な特許のみ診断できます。",
+        "拒絶": "この特許出願は拒絶されています。有効な特許のみ診断できます。",
+        "出願中": "この特許は出願中で、まだ登録されていません。登録済みの特許のみ診断できます。",
+        "取下": "この特許出願は取り下げられています。有効な特許のみ診断できます。"
+      };
+      const msg = statusMessages[patent.status] || `この特許は有効ではありません（状態: ${patent.status || "不明"}）。`;
+      showSystemMessage(msg, "warn");
+      submitButton.textContent = originalText;
+      submitButton.disabled = false;
+      return;
+    }
+
     const scores = computeScores(patent, input);
     const valueRange = estimateValueRange(patent, scores, input);
     const route = decideRoute(scores, input);

@@ -16,9 +16,11 @@ const {
   sendFile,
   sendJson
 } = require("./lib/http-utils");
-const { sendResultEmail, sendDetailedReportEmail } = require("./lib/mailer");
+const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail } = require("./lib/mailer");
 const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
-const { researchPatent } = require("./lib/patent-research");
+const { researchPatent, PatentInvalidError } = require("./lib/patent-research");
+const { fetchPatentStatus } = require("./lib/patent-api");
+const { saveLead, savePatent, updateLeadStatus } = require("./lib/supabase");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -479,6 +481,7 @@ async function getDiagnosis(query, requestId) {
     return {
       resultId: `cache_${hashValue(cacheKey).slice(0, 10)}`,
       patent: cached.patent,
+      invalid: cached.invalid || false,
       meta: {
         mode: "api",
         cacheHit: true,
@@ -495,6 +498,47 @@ async function getDiagnosis(query, requestId) {
   }
 
   metrics.cacheMiss += 1;
+
+  // Google Patents による軽量ステータスチェック (特許番号が6桁以上の場合のみ)
+  if (normalized && normalized.length >= 6) {
+    try {
+      const gpStatus = await fetchPatentStatus(normalized);
+      if (gpStatus.exists && !gpStatus.active && gpStatus.statusText) {
+        console.log(`[diagnose] patent ${normalized} is invalid (${gpStatus.statusText}), skipping LLM call`);
+        const invalidPatent = {
+          id: normalized,
+          title: `特許第${normalized}号`,
+          applicant: "",
+          applicantType: "",
+          registrationDate: "",
+          filingDate: "",
+          category: "",
+          status: gpStatus.statusText,
+          officialUrl: `https://www.j-platpat.inpit.go.jp/`,
+          metrics: {}
+        };
+        // 無効結果もキャッシュする（LLM呼び出しを防ぐ）
+        resultCache.set(cacheKey, {
+          patent: invalidPatent,
+          invalid: true,
+          expiresAt: Date.now() + CACHE_TTL_MS
+        });
+        return {
+          resultId: `inv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+          patent: invalidPatent,
+          invalid: true,
+          meta: {
+            mode: "api",
+            cacheHit: false,
+            requestId
+          }
+        };
+      }
+    } catch (error) {
+      // Google Patents チェック失敗時はLLMフローに進む（非ブロッキング）
+      console.warn(`[diagnose] Google Patents status check failed: ${error.message}`);
+    }
+  }
 
   let runner = inFlight.get(cacheKey);
   if (!runner) {
@@ -755,13 +799,31 @@ async function handler(req, res) {
           category: result.royaltyRange.category
         });
       } catch (error) {
-        console.error("[request-detailed-report] error:", error.message);
-        logRequest({
-          requestId,
-          type: "request_detailed_report_error",
-          patentId,
-          error: error.message
-        });
+        if (error instanceof PatentInvalidError) {
+          emailState.count -= 1; // クオータを返却
+          console.log(`[request-detailed-report] patent invalid: ${patentId} (${error.status})`);
+          // ユーザーにメールで無効理由を通知
+          try {
+            await sendPatentInvalidEmail({ email, name, patentNumber: patentId, status: error.status });
+          } catch (mailErr) {
+            console.warn(`[request-detailed-report] failed to send invalid notice email: ${mailErr.message}`);
+          }
+          logRequest({
+            requestId,
+            type: "request_detailed_report_invalid",
+            patentId,
+            patentStatus: error.status,
+            message: error.message
+          });
+        } else {
+          console.error("[request-detailed-report] error:", error.message);
+          logRequest({
+            requestId,
+            type: "request_detailed_report_error",
+            patentId,
+            error: error.message
+          });
+        }
       }
     })();
 
@@ -799,7 +861,18 @@ async function handler(req, res) {
       respondJson(req, res, 200, { requestId, report: result.report, structured: result.structured, source: result.source });
       logRequest({ requestId, type: "detailed_report", user: userKey, source: result.source });
     } catch (error) {
-      respondJson(req, res, 500, { requestId, message: "レポート生成に失敗しました。" });
+      if (error instanceof PatentInvalidError) {
+        reportState.count -= 1; // クオータを返却
+        respondJson(req, res, 422, {
+          requestId,
+          code: "PATENT_INVALID",
+          status: error.status,
+          message: error.message,
+          patent: error.patent ? { id: error.patent.id, title: error.patent.title, applicant: error.patent.applicant, status: error.patent.status } : null
+        });
+      } else {
+        respondJson(req, res, 500, { requestId, message: "レポート生成に失敗しました。" });
+      }
     }
     return;
   }
@@ -954,8 +1027,52 @@ async function handler(req, res) {
       return;
     }
 
+    // リード情報をDB保存（診断失敗時もリードは残す）
+    const leadName = String(body.name || "").trim().slice(0, 100);
+    const leadCompany = String(body.company || "").trim().slice(0, 100);
+    const leadEmail = String(body.email || "").trim().slice(0, 200);
+    const normalizedPatentNumber = normalizePatentNumber(validated.text);
+
+    let leadId = null;
+    if (leadEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail)) {
+      const leadRecord = await saveLead({
+        name: leadName,
+        companyName: leadCompany,
+        email: leadEmail,
+        source: "patent-value-check"
+      });
+      leadId = leadRecord?.id || null;
+      logRequest({
+        requestId,
+        type: "lead_saved",
+        leadId: leadId || "null",
+        hasEmail: true
+      });
+    }
+
     try {
       const diagnosis = await getDiagnosis(validated.text, requestId);
+
+      // 特許情報をDB保存（非同期・非ブロッキング）
+      if (leadId) {
+        savePatent({
+          leadId,
+          patentNumber: validated.text,
+          normalizedNumber: normalizedPatentNumber,
+          title: diagnosis.patent?.title || "",
+          category: diagnosis.patent?.category || "",
+          status: diagnosis.patent?.status || "",
+          filingDate: diagnosis.patent?.filingDate || null,
+          registrationDate: diagnosis.patent?.registrationDate || null
+        }).then(() => {
+          if (!diagnosis.invalid) {
+            updateLeadStatus(leadId, "diagnosed");
+          }
+        }).catch((err) => {
+          console.warn("[supabase] post-diagnose save failed:", err.message);
+        });
+      }
+
       metrics.diagnoseAllowed += 1;
       respondJson(req, res, 200, {
         requestId,
