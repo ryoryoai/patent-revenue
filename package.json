@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@sparticuz/chromium-min": "^143.0.4",
+    "@supabase/supabase-js": "^2.100.0",
     "dotenv": "^17.3.1",
     "puppeteer-core": "^24.39.1",
     "resend": "^4.0.0"
