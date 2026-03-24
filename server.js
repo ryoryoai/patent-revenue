@@ -20,8 +20,14 @@ const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail } = req
 const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
 const { researchPatent, PatentInvalidError } = require("./lib/patent-research");
 const { fetchPatentStatus } = require("./lib/patent-api");
-const { saveLead, savePatent, updateLeadStatus } = require("./lib/supabase");
+const { saveLead, savePatent, updateLeadStatus, getSupabase } = require("./lib/supabase");
 const { generateAndSaveToken, verifyAndGetData, saveRegistration } = require("./lib/detail-registration");
+const {
+  investigateAndRank,
+  isV2Available,
+  exportPatentsForAnalysis,
+  saveAnalysisResult
+} = require("./lib/v2-client");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -637,6 +643,139 @@ async function handler(req, res) {
         day: { used: globalBudget.dayCount, limit: GLOBAL_DAY_LIMIT, resetAt: new Date(globalBudget.dayResetAt).toISOString() }
       }
     });
+    return;
+  }
+
+  // 管理API: 特許リスト取得
+  if (req.method === "GET" && req.url?.startsWith("/api/admin/patents")) {
+    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+      metrics.errors4xx += 1;
+      respondJson(req, res, 403, { requestId, message: "forbidden" });
+      return;
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      respondJson(req, res, 503, { requestId, message: "Supabase not configured" });
+      return;
+    }
+
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const status = url.searchParams.get("status") || null;
+    const limit = Math.min(Number(url.searchParams.get("limit") || 100), 500);
+    const offset = Number(url.searchParams.get("offset") || 0);
+
+    let query = supabase
+      .from("patents")
+      .select("id, patent_number, normalized_number, title, category, applicant, ipc_codes, status, diagnosis_result, created_at, updated_at")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const { data: patents, error } = await query;
+
+    if (error) {
+      console.error("[admin/patents] Supabase error:", error.message);
+      respondJson(req, res, 500, { requestId, message: "database error" });
+      return;
+    }
+
+    respondJson(req, res, 200, { requestId, patents, count: patents.length, offset, limit });
+    return;
+  }
+
+  // 管理API: 侵害調査リストエクスポート
+  if (req.method === "POST" && req.url === "/api/admin/export-patents") {
+    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+      metrics.errors4xx += 1;
+      respondJson(req, res, 403, { requestId, message: "forbidden" });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 2);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    const format = String(body.format || "json").toLowerCase();
+    const limit = Math.min(Number(body.limit || 100), 500);
+    const status = body.status || "登録";
+
+    const patents = await exportPatentsForAnalysis({ limit, status });
+    if (patents === null) {
+      respondJson(req, res, 503, { requestId, message: "Supabase not available or query failed" });
+      return;
+    }
+
+    if (format === "csv") {
+      const headers = ["id", "patent_number", "normalized_number", "title", "category", "applicant", "ipc_codes"];
+      const rows = patents.map((p) =>
+        headers.map((h) => {
+          const v = p[h];
+          if (v === null || v === undefined) return "";
+          const s = Array.isArray(v) ? v.join("|") : String(v);
+          return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+        }).join(",")
+      );
+      const csv = [headers.join(","), ...rows].join("\n");
+
+      res.writeHead(200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="patents-export-${new Date().toISOString().slice(0, 10)}.csv"`
+      });
+      res.end(csv);
+      return;
+    }
+
+    respondJson(req, res, 200, { requestId, patents, count: patents.length });
+    return;
+  }
+
+  // 管理API: phase2分析結果同期
+  if (req.method === "POST" && req.url === "/api/admin/sync-analysis") {
+    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+      metrics.errors4xx += 1;
+      respondJson(req, res, 403, { requestId, message: "forbidden" });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req, BODY_LIMIT_BYTES * 4);
+    } catch (error) {
+      respondJson(req, res, 400, { requestId, message: "invalid request body" });
+      return;
+    }
+
+    const patentId = String(body.patent_id || "").trim();
+    if (!patentId) {
+      respondJson(req, res, 400, { requestId, message: "patent_id is required" });
+      return;
+    }
+
+    if (!body.result || typeof body.result !== "object") {
+      respondJson(req, res, 400, { requestId, message: "result must be an object" });
+      return;
+    }
+
+    const saved = await saveAnalysisResult(patentId, body.result);
+    if (saved === null) {
+      respondJson(req, res, 503, { requestId, message: "Supabase not available" });
+      return;
+    }
+    if (!saved) {
+      respondJson(req, res, 500, { requestId, message: "failed to save analysis result" });
+      return;
+    }
+
+    logRequest({ requestId, type: "admin_sync_analysis", patentId });
+    respondJson(req, res, 200, { requestId, message: "analysis result saved", patentId });
     return;
   }
 
