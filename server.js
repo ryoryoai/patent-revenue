@@ -49,7 +49,7 @@ const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
 const CAPTCHA_REQUIRED_TTL_MS = Number(process.env.CAPTCHA_REQUIRED_TTL_MS || 10 * 60_000);
 
-const EDGE_SHARED_SECRET = resolveSecret("EDGE_SHARED_SECRET", "", { isProduction });
+const EDGE_SHARED_SECRET = (process.env.EDGE_SHARED_SECRET || "").trim();
 const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
 const HASH_SECRET = resolveSecret("HASH_SECRET", "pvc-dev-secret", { isProduction });
 const METRICS_API_KEY = resolveSecret("METRICS_API_KEY", "dev-metrics-key", { isProduction });
@@ -866,6 +866,57 @@ async function handler(req, res) {
     return;
   }
 
+  // デバッグ: OpenAI API + JPO API接続テスト
+  if (req.method === "GET" && req.url === "/api/debug-connectivity") {
+    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+      respondJson(req, res, 403, { requestId, message: "forbidden" });
+      return;
+    }
+    const results = {};
+    // OpenAI test
+    try {
+      const { callOpenAiApi } = require("./lib/llm");
+      const llmResult = await callOpenAiApi("Reply with exactly: OK", { maxTokens: 5 });
+      results.openai = { ok: true, response: llmResult.slice(0, 50) };
+    } catch (e) {
+      results.openai = { ok: false, error: e.message };
+    }
+    // JPO test
+    try {
+      const { isPatentApiAvailable, fetchProgressSimple } = require("./lib/patent-api");
+      results.jpo = { available: isPatentApiAvailable() };
+      if (isPatentApiAvailable()) {
+        const data = await fetchProgressSimple("2018169552");
+        results.jpo.connected = !!data;
+      }
+    } catch (e) {
+      results.jpo.error = e.message;
+    }
+    // Supabase test
+    try {
+      const { getSupabase } = require("./lib/supabase");
+      const sb = getSupabase();
+      results.supabase = { available: !!sb };
+      if (sb) {
+        const { count } = await sb.from("leads").select("*", { count: "exact", head: true });
+        results.supabase.connected = true;
+        results.supabase.leadsCount = count;
+      }
+    } catch (e) {
+      results.supabase = { error: e.message };
+    }
+    results.env = {
+      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+      OPENAI_MODEL: process.env.OPENAI_MODEL || "(default gpt-5.4)",
+      JPO_USERNAME: !!process.env.JPO_USERNAME,
+      JPO_PASSWORD: !!process.env.JPO_PASSWORD,
+      SUPABASE_URL: !!process.env.SUPABASE_URL,
+      NODE_ENV: process.env.NODE_ENV
+    };
+    respondJson(req, res, 200, { requestId, ...results });
+    return;
+  }
+
   // 詳細レポート申請 (request-report.htmlから呼ばれる)
   // V2パイプラインで調査→詳細レポート生成→メール送信
   if (req.method === "POST" && req.url === "/api/request-detailed-report") {
@@ -968,11 +1019,13 @@ async function handler(req, res) {
           patentId,
           error: error.message
         });
+        const apiKey = process.env.OPENAI_API_KEY || "";
         respondJson(req, res, 500, {
           requestId,
           message: "レポート生成に失敗しました。しばらくしてからお試しください。",
           patentId,
-          _debug: error.message
+          _debug: error.message,
+          _keyInfo: `len=${apiKey.length} first=${apiKey.slice(0,7)} last=${apiKey.slice(-4)} hasNewline=${apiKey.includes('\n')} hasReturn=${apiKey.includes('\r')}`
         });
       }
     }
