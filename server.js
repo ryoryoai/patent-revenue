@@ -971,7 +971,8 @@ async function handler(req, res) {
         respondJson(req, res, 500, {
           requestId,
           message: "レポート生成に失敗しました。しばらくしてからお試しください。",
-          patentId
+          patentId,
+          _debug: error.message
         });
       }
     }
