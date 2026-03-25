@@ -28,6 +28,7 @@ const {
   exportPatentsForAnalysis,
   saveAnalysisResult
 } = require("./lib/v2-client");
+const { summarizeSecret } = require("./lib/header-safety");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -906,7 +907,8 @@ async function handler(req, res) {
       results.supabase = { error: e.message };
     }
     results.env = {
-      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+      OPENAI_API_KEY: summarizeSecret(process.env.OPENAI_API_KEY),
+      RESEND_API_KEY: summarizeSecret(process.env.RESEND_API_KEY),
       OPENAI_MODEL: process.env.OPENAI_MODEL || "(default gpt-5.4)",
       JPO_USERNAME: !!process.env.JPO_USERNAME,
       JPO_PASSWORD: !!process.env.JPO_PASSWORD,
@@ -955,10 +957,13 @@ async function handler(req, res) {
     emailState.count += 1;
 
     try {
+      console.log(`[request-detailed-report] start researchPatent: ${patentId}`);
       // 2層構成リサーチエンジンで包括的評価
       const result = await researchPatent(patentId, { name });
+      console.log(`[request-detailed-report] researchPatent done: ${patentId} source=${result.source}`);
 
       // 詳細レポートメール送信 (PDF添付)
+      console.log(`[request-detailed-report] start sendDetailedReportEmail: ${patentId}`);
       await sendDetailedReportEmail({
         email,
         name,
@@ -973,6 +978,7 @@ async function handler(req, res) {
           structured: result.structured
         }
       });
+      console.log(`[request-detailed-report] sendDetailedReportEmail done: ${patentId}`);
 
       logRequest({
         requestId,
@@ -1013,6 +1019,9 @@ async function handler(req, res) {
         });
       } else {
         console.error("[request-detailed-report] error:", error.message);
+        if (error && error.stack) {
+          console.error("[request-detailed-report] stack:", error.stack);
+        }
         logRequest({
           requestId,
           type: "request_detailed_report_error",
