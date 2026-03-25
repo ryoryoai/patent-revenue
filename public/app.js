@@ -580,8 +580,7 @@ function renderResult(result) {
     createNode("p", { className: "small", text: "詳細はPatentRevenue登録後に確認できます。" })
   ]);
 
-  joinLink.href = buildJoinUrl(result);
-  ctaNote.textContent = "登録導線には source=patent-value-check と診断IDを付与します。";
+  // join-link は外部リンクを廃止。メール経由の案内に変更。
 }
 
 async function fetchDetailedReport(result) {

@@ -829,6 +829,7 @@ async function handler(req, res) {
         await sendResultEmail({
           email,
           name,
+          siteHost: process.env.SITE_HOST || "patent-value-checker.iprich.jp",
           reportData: {
             rank: result.rank,
             name
@@ -1066,6 +1067,7 @@ async function handler(req, res) {
       const result = await sendResultEmail({
         email,
         name: String(body.name || ""),
+        siteHost: process.env.SITE_HOST || "patent-value-checker.iprich.jp",
         reportData: body.reportData,
         tokenUrl
       });
