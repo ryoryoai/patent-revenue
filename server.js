@@ -811,49 +811,50 @@ async function handler(req, res) {
       return;
     }
 
-    // 即座にレスポンスを返し、バックグラウンドで調査実行
-    respondJson(req, res, 202, {
-      requestId,
-      message: "評価を開始しました。完了後にメールでお知らせします。",
-      patentId
-    });
+    try {
+      const result = await investigateAndRank(patentId, {
+        pipeline: body.pipeline || "C"
+      });
 
-    // バックグラウンド処理
-    (async () => {
-      try {
-        const result = await investigateAndRank(patentId, {
-          pipeline: body.pipeline || "C"
-        });
-
-        // 簡易評価メール送信
-        await sendResultEmail({
-          email,
-          name,
-          siteHost: process.env.SITE_HOST || "patent-value-checker.iprich.jp",
-          reportData: {
-            rank: result.rank,
-            name
-          }
-        });
-
-        logRequest({
-          requestId,
-          type: "v2_evaluate_complete",
-          patentId,
+      // 簡易評価メール送信
+      await sendResultEmail({
+        email,
+        name,
+        siteHost: process.env.SITE_HOST || "patent-value-checker.iprich.jp",
+        reportData: {
           rank: result.rank,
-          reason: result.reason,
-          jobId: result.jobId
-        });
-      } catch (error) {
-        console.error("[v2-evaluate] error:", error.message);
-        logRequest({
-          requestId,
-          type: "v2_evaluate_error",
-          patentId,
-          error: error.message
-        });
-      }
-    })();
+          name
+        }
+      });
+
+      logRequest({
+        requestId,
+        type: "v2_evaluate_complete",
+        patentId,
+        rank: result.rank,
+        reason: result.reason,
+        jobId: result.jobId
+      });
+
+      respondJson(req, res, 200, {
+        requestId,
+        message: "評価が完了しました。メールをご確認ください。",
+        patentId
+      });
+    } catch (error) {
+      console.error("[v2-evaluate] error:", error.message);
+      logRequest({
+        requestId,
+        type: "v2_evaluate_error",
+        patentId,
+        error: error.message
+      });
+      respondJson(req, res, 500, {
+        requestId,
+        message: "評価処理に失敗しました。しばらくしてからお試しください。",
+        patentId
+      });
+    }
 
     return;
   }
@@ -900,73 +901,80 @@ async function handler(req, res) {
 
     const name = String(body.name || "");
 
-    // 即座にレスポンスを返す
-    respondJson(req, res, 202, {
-      requestId,
-      message: "申請を受け付けました。評価完了後にメールでレポートをお届けします。",
-      patentId
-    });
-
     emailState.count += 1;
 
-    // バックグラウンドで JPO API→2層評価→LLMレポート→メール送信
-    (async () => {
-      try {
-        // 2層構成リサーチエンジンで包括的評価
-        const result = await researchPatent(patentId, { name });
+    try {
+      // 2層構成リサーチエンジンで包括的評価
+      const result = await researchPatent(patentId, { name });
 
-        // 詳細レポートメール送信 (PDF添付)
-        await sendDetailedReportEmail({
-          email,
-          name,
-          reportData: {
-            patent: result.patent,
-            scores: result.scores,
-            valueRange: result.valueRange,
-            route: { title: result.scores.monetization >= 60 ? "ライセンス向き" : "調査強化推奨" },
-            rank: result.rank,
-            rankMessage: result.rankMessage,
-            report: result.report,
-            structured: result.structured
-          }
-        });
+      // 詳細レポートメール送信 (PDF添付)
+      await sendDetailedReportEmail({
+        email,
+        name,
+        reportData: {
+          patent: result.patent,
+          scores: result.scores,
+          valueRange: result.valueRange,
+          route: { title: result.scores.monetization >= 60 ? "ライセンス向き" : "調査強化推奨" },
+          rank: result.rank,
+          rankMessage: result.rankMessage,
+          report: result.report,
+          structured: result.structured
+        }
+      });
 
+      logRequest({
+        requestId,
+        type: "request_detailed_report_complete",
+        patentId,
+        rank: result.rank,
+        reportSource: result.source,
+        category: result.royaltyRange.category
+      });
+
+      respondJson(req, res, 200, {
+        requestId,
+        message: "レポートを送信しました。メールをご確認ください。",
+        patentId
+      });
+    } catch (error) {
+      if (error instanceof PatentInvalidError) {
+        emailState.count -= 1; // クオータを返却
+        console.log(`[request-detailed-report] patent invalid: ${patentId} (${error.status})`);
+        // ユーザーにメールで無効理由を通知
+        try {
+          await sendPatentInvalidEmail({ email, name, patentNumber: patentId, status: error.status });
+        } catch (mailErr) {
+          console.warn(`[request-detailed-report] failed to send invalid notice email: ${mailErr.message}`);
+        }
         logRequest({
           requestId,
-          type: "request_detailed_report_complete",
+          type: "request_detailed_report_invalid",
           patentId,
-          rank: result.rank,
-          reportSource: result.source,
-          category: result.royaltyRange.category
+          patentStatus: error.status,
+          message: error.message
         });
-      } catch (error) {
-        if (error instanceof PatentInvalidError) {
-          emailState.count -= 1; // クオータを返却
-          console.log(`[request-detailed-report] patent invalid: ${patentId} (${error.status})`);
-          // ユーザーにメールで無効理由を通知
-          try {
-            await sendPatentInvalidEmail({ email, name, patentNumber: patentId, status: error.status });
-          } catch (mailErr) {
-            console.warn(`[request-detailed-report] failed to send invalid notice email: ${mailErr.message}`);
-          }
-          logRequest({
-            requestId,
-            type: "request_detailed_report_invalid",
-            patentId,
-            patentStatus: error.status,
-            message: error.message
-          });
-        } else {
-          console.error("[request-detailed-report] error:", error.message);
-          logRequest({
-            requestId,
-            type: "request_detailed_report_error",
-            patentId,
-            error: error.message
-          });
-        }
+        respondJson(req, res, 422, {
+          requestId,
+          code: "PATENT_INVALID",
+          message: error.message,
+          patentId
+        });
+      } else {
+        console.error("[request-detailed-report] error:", error.message);
+        logRequest({
+          requestId,
+          type: "request_detailed_report_error",
+          patentId,
+          error: error.message
+        });
+        respondJson(req, res, 500, {
+          requestId,
+          message: "レポート生成に失敗しました。しばらくしてからお試しください。",
+          patentId
+        });
       }
-    })();
+    }
 
     return;
   }
