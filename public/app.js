@@ -729,17 +729,15 @@ diagnosisForm.addEventListener("submit", async (event) => {
   }
 });
 
-joinLink.addEventListener("click", () => {
-  if (!latestResult) return;
-  trackEvent("cta_click_join_patentrevenue", {
-    result_id: latestResult.resultId,
-    patent_id: latestResult.patent.id
+if (joinLink) {
+  joinLink.addEventListener("click", () => {
+    if (!latestResult) return;
+    trackEvent("cta_click_join_patentrevenue", {
+      result_id: latestResult.resultId,
+      patent_id: latestResult.patent.id
+    });
   });
-  trackEvent("signup_start", {
-    result_id: latestResult.resultId,
-    patent_id: latestResult.patent.id
-  });
-});
+}
 
 backToInputBtn.addEventListener("click", showInputScreen);
 
