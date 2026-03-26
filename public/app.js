@@ -73,12 +73,6 @@ const categoryRoyaltyRange = {
 const diagnosisForm = document.getElementById("diagnosis-form");
 const screenResult = document.getElementById("screen-result");
 const scoreEl = document.getElementById("teaser-score");
-const summaryEl = document.getElementById("teaser-summary");
-const valueEl = document.getElementById("teaser-value");
-const routeEl = document.getElementById("teaser-route");
-const nextEl = document.getElementById("teaser-next");
-const reasonsEl = document.getElementById("teaser-reasons");
-const gatedEl = document.getElementById("teaser-gated");
 const joinLink = document.getElementById("join-link");
 const backToInputBtn = document.getElementById("back-to-input");
 const systemMessage = document.getElementById("system-message");
@@ -514,68 +508,10 @@ function createExternalLink(href, text) {
 
 function renderResult(result) {
   const score = result.scores;
-  const valueRange = result.valueRange;
-  const route = result.route;
-  const rationales = generateRationales(score);
-  const next = nextAction(route, valueRange);
   appendChildren(scoreEl, [
     createNode("p", { className: "score-label", text: "Patent Value Score" }),
     createNode("p", { className: "score-main", text: String(score.total) }),
-    createNode("p", { className: "rank", text: `ランク ${score.rank} / 信頼度 ${valueRange.confidence}` }),
     createNode("p", { className: "rank-message", text: rankMessages[score.rank] || "" })
-  ]);
-
-  const officialLinkRow = createNode("p", { className: "small" });
-  officialLinkRow.appendChild(createExternalLink(result.patent.officialUrl, "J-PlatPatで確認"));
-  appendChildren(summaryEl, [
-    createNode("h3", { text: "診断サマリー" }),
-    createNode("p", { className: "title", text: result.patent.title }),
-    createNode("p", { text: generateComment(score) }),
-    createNode("p", { className: "small", text: `特許ID: ${result.patent.id} / カテゴリ: ${result.patent.category}` }),
-    createNode("p", { className: "small", text: `出願: ${result.patent.filingDate} / 登録: ${result.patent.registrationDate}` }),
-    createNode("p", { className: "small", text: `応答: ${result.meta?.mode || "api"} / キャッシュ: ${result.meta?.cacheHit ? "hit" : "miss"}` }),
-    officialLinkRow
-  ]);
-
-  appendChildren(valueEl, [
-    createNode("h3", { text: "価値レンジ（概算）" }),
-    createNode("p", { className: "title", text: `${yenRangeLabel(valueRange.low)} 〜 ${yenRangeLabel(valueRange.high)}` }),
-    createNode("p", { text: valueRange.reason })
-  ]);
-
-  appendChildren(routeEl, [
-    createNode("h3", { text: "向いている収益化手段" }),
-    createNode("p", { className: "title", text: route.title }),
-    createNode("p", { text: route.body })
-  ]);
-
-  appendChildren(nextEl, [
-    createNode("h3", { text: "次の一手" }),
-    createNode("p", { text: next })
-  ]);
-
-  const rationaleList = document.createElement("ul");
-  rationales.forEach((text) => {
-    rationaleList.appendChild(createNode("li", { text }));
-  });
-  appendChildren(reasonsEl, [
-    createNode("h3", { text: "評価根拠（公開範囲）" }),
-    rationaleList
-  ]);
-
-  const gatedList = createNode("div", { className: "gated-list" });
-  [
-    "・影響度の年次推移グラフ",
-    "・候補企業リスト（用途一致順）",
-    "・売却/ライセンス条件の比較表",
-    "・交渉前チェックリスト"
-  ].forEach((text) => {
-    gatedList.appendChild(createNode("p", { text }));
-  });
-  appendChildren(gatedEl, [
-    createNode("h3", { text: "会員向け詳細（非表示）" }),
-    gatedList,
-    createNode("p", { className: "small", text: "詳細はPatentRevenue登録後に確認できます。" })
   ]);
 
   // join-link は外部リンクを廃止。メール経由の案内に変更。
