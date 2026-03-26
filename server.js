@@ -29,6 +29,7 @@ const {
   saveAnalysisResult
 } = require("./lib/v2-client");
 const { summarizeSecret } = require("./lib/header-safety");
+const { verifyAdminAuth } = require("./lib/admin-auth");
 
 const port = Number(process.env.PORT || 3000);
 const publicDir = path.join(__dirname, "public");
@@ -45,6 +46,7 @@ const GLOBAL_HOUR_LIMIT = Number(process.env.GLOBAL_HOUR_LIMIT || 500);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 4_500);
 const DEFAULT_ALLOWED_ORIGINS = ["https://ryoryoai.github.io"];
 const CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+const ADMIN_CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ${process.env.SUPABASE_URL || "https://*.supabase.co"}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`;
 
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
@@ -170,6 +172,29 @@ function getDailyLimitState(store, key) {
     store.set(key, state);
   }
   return state;
+}
+
+// ── API エンドポイント共通ヘルパー ──
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function apiUserKey(req, res) {
+  const clientIp = extractClientIp(req);
+  const visitorId = ensureVisitorCookie(req, res);
+  return hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
+}
+
+function apiParseBody(req, multiplier = 1) {
+  return readJsonBody(req, BODY_LIMIT_BYTES * multiplier);
+}
+
+function apiCheckEmail(raw) {
+  const email = String(raw || "").trim();
+  return EMAIL_RE.test(email) ? email : null;
+}
+
+function apiCheckLimit(store, userKey, limit) {
+  const state = getDailyLimitState(store, userKey);
+  return { allowed: state.count < limit, state };
 }
 
 function getUserState(identifier) {
@@ -418,9 +443,10 @@ function applySecurityHeaders(req, res, requestId) {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  const isAdmin = (req.url || "").startsWith("/admin/") || (req.url || "").startsWith("/api/admin/");
   res.setHeader(
     "Content-Security-Policy",
-    CONTENT_SECURITY_POLICY
+    isAdmin ? ADMIN_CSP : CONTENT_SECURITY_POLICY
   );
 
   if (req.headers["x-forwarded-proto"] === "https" || req.socket.encrypted) {
@@ -619,7 +645,7 @@ async function handler(req, res) {
       applyApiCors(req, res);
       res.writeHead(204, {
         "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, X-Metrics-Key"
+        "Access-Control-Allow-Headers": "Content-Type, X-Metrics-Key, Authorization"
       });
       res.end();
       return;
@@ -627,7 +653,8 @@ async function handler(req, res) {
   }
 
   if (req.method === "GET" && req.url === "/api/metrics") {
-    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.ok) {
       metrics.errors4xx += 1;
       respondJson(req, res, 403, { requestId, message: "forbidden" });
       return;
@@ -931,38 +958,20 @@ async function handler(req, res) {
   // 詳細レポート申請 (request-report.htmlから呼ばれる)
   // V2パイプラインで調査→詳細レポート生成→メール送信
   if (req.method === "POST" && req.url === "/api/request-detailed-report") {
-    const clientIp = extractClientIp(req);
-    const visitorId = ensureVisitorCookie(req, res);
-    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
-
-    const emailState = getDailyLimitState(emailLimitStore, userKey);
-    if (emailState.count >= 3) {
-      respondJson(req, res, 429, { requestId, message: "1日あたりの上限（3回）に達しました。" });
-      return;
-    }
+    const userKey = apiUserKey(req, res);
+    const { allowed, state: emailState } = apiCheckLimit(emailLimitStore, userKey, 3);
+    if (!allowed) { respondJson(req, res, 429, { requestId, message: "1日あたりの上限（3回）に達しました。" }); return; }
 
     let body;
-    try {
-      body = await readJsonBody(req, BODY_LIMIT_BYTES * 2);
-    } catch (error) {
-      respondJson(req, res, 400, { requestId, message: "invalid request body" });
-      return;
-    }
+    try { body = await apiParseBody(req, 2); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
 
-    const email = String(body.email || "").trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" });
-      return;
-    }
+    const email = apiCheckEmail(body.email);
+    if (!email) { respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" }); return; }
 
     const patentId = String(body.patentId || "").trim();
-    if (!patentId) {
-      respondJson(req, res, 400, { requestId, message: "特許番号を入力してください。" });
-      return;
-    }
+    if (!patentId) { respondJson(req, res, 400, { requestId, message: "特許番号を入力してください。" }); return; }
 
     const name = String(body.name || "");
-
     emailState.count += 1;
 
     try {
@@ -1053,29 +1062,15 @@ async function handler(req, res) {
   }
 
   if (req.method === "POST" && req.url === "/api/detailed-report") {
-    const clientIp = extractClientIp(req);
-    const visitorId = ensureVisitorCookie(req, res);
-    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
-
-    const reportState = getDailyLimitState(reportLimitStore, userKey);
-    if (reportState.count >= 3) {
-      respondJson(req, res, 429, { requestId, message: "詳細レポートの1日あたりの上限（3回）に達しました。" });
-      return;
-    }
+    const userKey = apiUserKey(req, res);
+    const { allowed, state: reportState } = apiCheckLimit(reportLimitStore, userKey, 3);
+    if (!allowed) { respondJson(req, res, 429, { requestId, message: "詳細レポートの1日あたりの上限（3回）に達しました。" }); return; }
 
     let body;
-    try {
-      body = await readJsonBody(req, BODY_LIMIT_BYTES * 4);
-    } catch (error) {
-      respondJson(req, res, 400, { requestId, message: "invalid request body" });
-      return;
-    }
+    try { body = await apiParseBody(req, 4); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
 
     const patentId = body.patentId || body.patent?.id || "";
-    if (!patentId) {
-      respondJson(req, res, 400, { requestId, message: "patentId is required" });
-      return;
-    }
+    if (!patentId) { respondJson(req, res, 400, { requestId, message: "patentId is required" }); return; }
 
     try {
       reportState.count += 1;
@@ -1099,109 +1094,55 @@ async function handler(req, res) {
     return;
   }
 
-  if (req.method === "POST" && req.url === "/api/send-report") {
-    const clientIp = extractClientIp(req);
-    const visitorId = ensureVisitorCookie(req, res);
-    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
-
-    const emailState = getDailyLimitState(emailLimitStore, userKey);
-    if (emailState.count >= 3) {
-      respondJson(req, res, 429, { requestId, message: "メール送信の1日あたりの上限（3通）に達しました。" });
-      return;
-    }
+  // メール送信 (簡易/詳細を統合: reportType="detailed" でPDF添付版)
+  // /api/send-detailed-report は互換エイリアス
+  if (req.method === "POST" && (req.url === "/api/send-report" || req.url === "/api/send-detailed-report")) {
+    const userKey = apiUserKey(req, res);
+    const { allowed, state: emailState } = apiCheckLimit(emailLimitStore, userKey, 3);
+    if (!allowed) { respondJson(req, res, 429, { requestId, message: "メール送信の1日あたりの上限（3通）に達しました。" }); return; }
 
     let body;
-    try {
-      body = await readJsonBody(req, BODY_LIMIT_BYTES * 4);
-    } catch (error) {
-      respondJson(req, res, 400, { requestId, message: "invalid request body" });
-      return;
-    }
+    try { body = await apiParseBody(req, 8); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
 
-    const email = String(body.email || "").trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" });
-      return;
-    }
+    const email = apiCheckEmail(body.email);
+    if (!email) { respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" }); return; }
+    if (!body.reportData) { respondJson(req, res, 400, { requestId, message: "reportData is required" }); return; }
 
-    if (!body.reportData) {
-      respondJson(req, res, 400, { requestId, message: "reportData is required" });
-      return;
-    }
+    const isDetailed = body.reportType === "detailed" || req.url === "/api/send-detailed-report";
+    const name = String(body.name || "");
 
     try {
       emailState.count += 1;
 
-      // リードIDが分かる場合はトークン生成してCTAリンクをメールに追加
-      let tokenUrl;
-      const leadIdForToken = String(body.leadId || "").trim();
-      if (leadIdForToken) {
-        try {
-          const token = await generateAndSaveToken(leadIdForToken);
-          const siteHost = process.env.SITE_HOST || "patent-value-analyzer.iprich.jp";
-          tokenUrl = `https://${siteHost}/detail-registration.html?t=${token}`;
-        } catch (tokenErr) {
-          console.warn("[send-report] token generation failed:", tokenErr.message);
+      let result;
+      if (isDetailed) {
+        result = await sendDetailedReportEmail({ email, name, reportData: body.reportData });
+      } else {
+        // CTA リンク生成（リードIDがある場合）
+        let tokenUrl;
+        const leadIdForToken = String(body.leadId || "").trim();
+        if (leadIdForToken) {
+          try {
+            const token = await generateAndSaveToken(leadIdForToken);
+            const siteHost = process.env.SITE_HOST || "patent-value-analyzer.iprich.jp";
+            tokenUrl = `https://${siteHost}/detail-registration.html?t=${token}`;
+          } catch (tokenErr) {
+            console.warn("[send-report] token generation failed:", tokenErr.message);
+          }
         }
+        result = await sendResultEmail({
+          email, name,
+          siteHost: process.env.SITE_HOST || "patent-value-analyzer.iprich.jp",
+          reportData: body.reportData,
+          tokenUrl
+        });
       }
 
-      const result = await sendResultEmail({
-        email,
-        name: String(body.name || ""),
-        siteHost: process.env.SITE_HOST || "patent-value-analyzer.iprich.jp",
-        reportData: body.reportData,
-        tokenUrl
-      });
-      respondJson(req, res, 200, { requestId, message: "メールを送信しました。", emailId: result.id });
-      logRequest({ requestId, type: "send_report", user: userKey });
+      const msg = isDetailed ? "詳細評価レポートメールを送信しました。" : "メールを送信しました。";
+      respondJson(req, res, 200, { requestId, message: msg, emailId: result?.id });
+      logRequest({ requestId, type: isDetailed ? "send_detailed_report" : "send_report", user: userKey });
     } catch (error) {
       console.error("[mailer] error:", error.message);
-      respondJson(req, res, 500, { requestId, message: "メール送信に失敗しました。" });
-    }
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/api/send-detailed-report") {
-    const clientIp = extractClientIp(req);
-    const visitorId = ensureVisitorCookie(req, res);
-    const userKey = hashValue(`${normalizeIpForId(clientIp)}:${visitorId}`);
-
-    const emailState = getDailyLimitState(emailLimitStore, userKey);
-    if (emailState.count >= 3) {
-      respondJson(req, res, 429, { requestId, message: "メール送信の1日あたりの上限（3通）に達しました。" });
-      return;
-    }
-
-    let body;
-    try {
-      body = await readJsonBody(req, BODY_LIMIT_BYTES * 8);
-    } catch (error) {
-      respondJson(req, res, 400, { requestId, message: "invalid request body" });
-      return;
-    }
-
-    const email = String(body.email || "").trim();
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      respondJson(req, res, 400, { requestId, message: "有効なメールアドレスを入力してください。" });
-      return;
-    }
-
-    if (!body.reportData || !body.reportData.report) {
-      respondJson(req, res, 400, { requestId, message: "reportData with report is required" });
-      return;
-    }
-
-    try {
-      emailState.count += 1;
-      const result = await sendDetailedReportEmail({
-        email,
-        name: String(body.name || ""),
-        reportData: body.reportData
-      });
-      respondJson(req, res, 200, { requestId, message: "詳細評価レポートメールを送信しました。", emailId: result.id });
-      logRequest({ requestId, type: "send_detailed_report", user: userKey });
-    } catch (error) {
-      console.error("[mailer] detailed report error:", error.message);
       respondJson(req, res, 500, { requestId, message: "メール送信に失敗しました。" });
     }
     return;
