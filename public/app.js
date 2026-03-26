@@ -561,12 +561,6 @@ diagnosisForm.addEventListener("submit", async (event) => {
     contribution: String(fd.get("contribution") || "")
   };
 
-  const diagPrivacyCheck = document.getElementById("diag-privacy-agree");
-  if (diagPrivacyCheck && !diagPrivacyCheck.checked) {
-    showSystemMessage("プライバシーポリシーに同意してください。", "warn");
-    return;
-  }
-
   if (!input.query) {
     showSystemMessage("特許番号・公開番号・キーワードを入力してください。", "warn");
     return;
