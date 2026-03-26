@@ -553,7 +553,8 @@ diagnosisForm.addEventListener("submit", async (event) => {
   const submitButton = diagnosisForm.querySelector("button[type='submit']");
   const originalText = submitButton.textContent;
   submitButton.disabled = true;
-  submitButton.textContent = "診断中...";
+  submitButton.classList.add("btn-loading");
+  submitButton.textContent = "診断しています…";
 
   trackEvent("diagnosis_start", {
     query_type: normalizePatentNumber(input.query).length >= 6 ? "number" : "keyword"
@@ -583,6 +584,7 @@ diagnosisForm.addEventListener("submit", async (event) => {
       };
       const msg = statusMessages[patent.status] || `この特許は有効ではありません（状態: ${patent.status || "不明"}）。`;
       showSystemMessage(msg, "warn");
+      submitButton.classList.remove("btn-loading");
       submitButton.textContent = originalText;
       submitButton.disabled = false;
       return;
@@ -660,6 +662,7 @@ diagnosisForm.addEventListener("submit", async (event) => {
       showSystemMessage("診断に失敗しました。時間をおいて再度お試しください。", "error");
     }
   } finally {
+    submitButton.classList.remove("btn-loading");
     submitButton.disabled = false;
     submitButton.textContent = originalText;
   }
@@ -726,7 +729,8 @@ if (regForm) {
     const submitBtn = document.getElementById("reg-submit-btn");
     const statusEl = document.getElementById("reg-status");
     submitBtn.disabled = true;
-    submitBtn.textContent = "申請中...";
+    submitBtn.classList.add("btn-loading");
+    submitBtn.textContent = "レポートを生成しています…";
 
     const email = document.getElementById("lead-email")?.value?.trim() || "";
     const name = document.getElementById("lead-name")?.value?.trim() || "";
@@ -766,6 +770,7 @@ if (regForm) {
       statusEl.textContent = "通信エラーが発生しました。";
       statusEl.classList.remove("hidden");
     } finally {
+      submitBtn.classList.remove("btn-loading");
       submitBtn.disabled = false;
       submitBtn.textContent = "詳細レポートを申請する";
     }
