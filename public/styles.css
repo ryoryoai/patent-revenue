@@ -605,6 +605,14 @@ h3 {
   font-weight: 700;
 }
 
+.rank-message {
+  margin: 0;
+  font-size: 18px;
+  color: var(--primary);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .rank-criteria {
   margin: 16px 0 0;
   display: flex;
