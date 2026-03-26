@@ -12,7 +12,7 @@
 - [ ] `HASH_SECRET` — セッションハッシュ用シークレット
 - [ ] `EDGE_SHARED_SECRET` — エッジ・サーバー間の共有シークレット
 - [ ] `METRICS_API_KEY` — メトリクス API キー
-- [ ] `SITE_HOST=patent-value-checker.iprich.jp` — 詳細登録URLのホスト名
+- [ ] `SITE_HOST=patent-value-analyzer.iprich.jp` — 詳細登録URLのホスト名
 - [ ] `NODE_ENV=production`
 
 ### 任意
@@ -57,7 +57,7 @@ git push origin main
 
 ## デプロイ後の確認事項
 
-- [ ] トップページが表示される（`https://patent-value-checker.iprich.jp/`）
+- [ ] トップページが表示される（`https://patent-value-analyzer.iprich.jp/`）
 - [ ] 4項目フォーム（特許番号・氏名・メール・電話）が表示される
 - [ ] 診断が実行できる（特許番号入力 → 評価結果表示）
 - [ ] メール送信される（診断結果メールが届く）

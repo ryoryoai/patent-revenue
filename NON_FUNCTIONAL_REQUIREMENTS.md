@@ -1,4 +1,4 @@
-# Patent Value Check Non-Functional Requirements (MVP)
+# Patent Value Analyzer Non-Functional Requirements (MVP)
 
 ## Scope
 - Cost protection for diagnosis API

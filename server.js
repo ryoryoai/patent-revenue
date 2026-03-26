@@ -821,7 +821,7 @@ async function handler(req, res) {
       await sendResultEmail({
         email,
         name,
-        siteHost: process.env.SITE_HOST || "patent-value-checker.iprich.jp",
+        siteHost: process.env.SITE_HOST || "patent-value-analyzer.iprich.jp",
         reportData: {
           rank: result.rank,
           name
@@ -915,6 +915,15 @@ async function handler(req, res) {
       SUPABASE_URL: !!process.env.SUPABASE_URL,
       NODE_ENV: process.env.NODE_ENV
     };
+    // PDF生成テスト
+    try {
+      const { generateReportPdf } = require("./lib/pdf-report");
+      const pdfBuf = await generateReportPdf({ name: "test", patent: { id: "test", title: "test" }, scores: { total: 50 }, report: { summary: "test" } });
+      results.pdf = { ok: true, size: pdfBuf.length };
+    } catch (e) {
+      results.pdf = { ok: false, error: e.message };
+    }
+
     respondJson(req, res, 200, { requestId, ...results });
     return;
   }
@@ -964,7 +973,7 @@ async function handler(req, res) {
 
       // 詳細レポートメール送信 (PDF添付)
       console.log(`[request-detailed-report] start sendDetailedReportEmail: ${patentId}`);
-      await sendDetailedReportEmail({
+      const pdfInfo = await sendDetailedReportEmail({
         email,
         name,
         reportData: {
@@ -978,7 +987,7 @@ async function handler(req, res) {
           structured: result.structured
         }
       });
-      console.log(`[request-detailed-report] sendDetailedReportEmail done: ${patentId}`);
+      console.log(`[request-detailed-report] sendDetailedReportEmail done: ${patentId}`, JSON.stringify(pdfInfo));
 
       logRequest({
         requestId,
@@ -992,7 +1001,8 @@ async function handler(req, res) {
       respondJson(req, res, 200, {
         requestId,
         message: "レポートを送信しました。メールをご確認ください。",
-        patentId
+        patentId,
+        _pdf: pdfInfo
       });
     } catch (error) {
       if (error instanceof PatentInvalidError) {
@@ -1128,7 +1138,7 @@ async function handler(req, res) {
       if (leadIdForToken) {
         try {
           const token = await generateAndSaveToken(leadIdForToken);
-          const siteHost = process.env.SITE_HOST || "patent-value-checker.iprich.jp";
+          const siteHost = process.env.SITE_HOST || "patent-value-analyzer.iprich.jp";
           tokenUrl = `https://${siteHost}/detail-registration.html?t=${token}`;
         } catch (tokenErr) {
           console.warn("[send-report] token generation failed:", tokenErr.message);
@@ -1138,7 +1148,7 @@ async function handler(req, res) {
       const result = await sendResultEmail({
         email,
         name: String(body.name || ""),
-        siteHost: process.env.SITE_HOST || "patent-value-checker.iprich.jp",
+        siteHost: process.env.SITE_HOST || "patent-value-analyzer.iprich.jp",
         reportData: body.reportData,
         tokenUrl
       });
@@ -1443,7 +1453,7 @@ async function handler(req, res) {
 if (!process.env.VERCEL) {
   const server = http.createServer(handler);
   server.listen(port, () => {
-    console.log(`Patent Value Check running at http://localhost:${port}`);
+    console.log(`Patent Value Analyzer running at http://localhost:${port}`);
   });
 }
 

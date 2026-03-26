@@ -1,6 +1,6 @@
 # AGENTS.md
 
-## Patent Value Checker + Patent Catalog
+## Patent Value Analyzer + Patent Catalog
 
 ### 開発フロー（Solo モード）
 
