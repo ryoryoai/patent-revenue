@@ -157,10 +157,7 @@ h3 {
 }
 
 .hero-grid {
-  display: grid;
-  grid-template-columns: 1.4fr 0.6fr;
-  gap: 28px;
-  align-items: start;
+  display: block;
 }
 
 .eyebrow {
