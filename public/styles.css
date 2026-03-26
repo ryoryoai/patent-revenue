@@ -574,7 +574,7 @@ h3 {
   background: linear-gradient(155deg, #ffffff 0%, #e8f0fe 50%, #d8ffff 100%);
   text-align: center;
   padding: 36px 48px;
-  max-width: 400px;
+  max-width: 520px;
   width: 100%;
   border-radius: var(--radius-lg);
   box-shadow: 0 4px 20px rgba(51, 71, 142, 0.12);
