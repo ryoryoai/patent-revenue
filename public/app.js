@@ -509,23 +509,28 @@ function createExternalLink(href, text) {
 function renderResult(result) {
   const score = result.scores;
 
-  const rankLetter = createNode("p", { className: "rank-letter", text: score.rank });
+  // カード内: アルファベットのみ
+  appendChildren(scoreEl, [
+    createNode("p", { className: "rank-letter", text: score.rank })
+  ]);
 
-  const criteria = document.createElement("div");
-  criteria.className = "rank-criteria";
-  ["A", "B", "C", "D"].forEach(r => {
-    const row = document.createElement("div");
-    row.className = "rank-row" + (r === score.rank ? " rank-active" : "");
-    const letter = createNode("span", { className: "rank-row-letter", text: r });
-    const desc = createNode("span", { className: "rank-row-desc", text: rankMessages[r] });
-    row.appendChild(letter);
-    row.appendChild(desc);
-    criteria.appendChild(row);
-  });
-
-  const comment = createNode("p", { className: "score-comment", text: generateComment(score) });
-
-  appendChildren(scoreEl, [rankLetter, criteria, comment]);
+  // カード外: 判定基準テーブル + コメント
+  const criteriaArea = document.getElementById("rank-criteria-area");
+  if (criteriaArea) {
+    const criteria = document.createElement("div");
+    criteria.className = "rank-criteria";
+    ["A", "B", "C", "D"].forEach(r => {
+      const row = document.createElement("div");
+      row.className = "rank-row" + (r === score.rank ? " rank-active" : "");
+      const letter = createNode("span", { className: "rank-row-letter", text: r });
+      const desc = createNode("span", { className: "rank-row-desc", text: rankMessages[r] });
+      row.appendChild(letter);
+      row.appendChild(desc);
+      criteria.appendChild(row);
+    });
+    const comment = createNode("p", { className: "score-comment", text: generateComment(score) });
+    criteriaArea.replaceChildren(criteria, comment);
+  }
 }
 
 
