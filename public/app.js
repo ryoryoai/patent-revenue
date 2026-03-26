@@ -80,9 +80,7 @@ const nextEl = document.getElementById("teaser-next");
 const reasonsEl = document.getElementById("teaser-reasons");
 const gatedEl = document.getElementById("teaser-gated");
 const joinLink = document.getElementById("join-link");
-const reportSignupBtn = document.getElementById("report-signup");
 const backToInputBtn = document.getElementById("back-to-input");
-const ctaNote = document.getElementById("cta-note");
 const systemMessage = document.getElementById("system-message");
 const captchaBox = document.getElementById("captcha-box");
 const captchaWidget = document.getElementById("captcha-widget");
@@ -741,16 +739,6 @@ joinLink.addEventListener("click", () => {
     result_id: latestResult.resultId,
     patent_id: latestResult.patent.id
   });
-});
-
-reportSignupBtn.addEventListener("click", () => {
-  if (!latestResult) return;
-  trackEvent("signup_complete", {
-    result_id: latestResult.resultId,
-    patent_id: latestResult.patent.id,
-    source: "demo-report"
-  });
-  window.alert("signup_complete を記録しました（デモ）。");
 });
 
 backToInputBtn.addEventListener("click", showInputScreen);
