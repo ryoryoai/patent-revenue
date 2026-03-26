@@ -116,6 +116,39 @@ h3 {
   box-shadow: var(--shadow-sm);
 }
 
+/* --- Site Nav --- */
+
+.site-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 24px;
+  background: #1f266b;
+}
+
+.site-nav-brand {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  text-decoration: none;
+  letter-spacing: 0.04em;
+}
+
+.site-nav-brand:hover {
+  opacity: 0.9;
+}
+
+.site-nav-link {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.site-nav-link:hover {
+  color: #ffffff;
+}
+
 /* --- Hero --- */
 
 .hero {
