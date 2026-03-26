@@ -209,27 +209,61 @@
         </div>
 
         <div id="detailed-report-area" class="detailed-report-area">
-          <button id="detailed-report-btn" class="btn btn-primary" type="button">詳細レポートを生成</button>
-          <section id="detailed-report" class="card hidden"></section>
-        </div>
+          <button id="detailed-report-btn" class="btn btn-primary" type="button">詳細レポートを申請する</button>
+          <div id="registration-accordion" class="registration-accordion hidden">
+            <div class="registration-form-card">
+              <h3>詳細レポートの申請</h3>
+              <p class="section-lead">以下の情報を入力して申請してください。AIが詳細な評価レポートをメールでお届けします。</p>
 
-        <div class="email-form-area">
-          <h3>診断結果をメールで受け取る</h3>
-          <div class="email-form">
-            <label>
-              メールアドレス <span class="required">*</span>
-              <input id="report-email" type="email" placeholder="example@example.com" required />
-            </label>
-            <label>
-              氏名（任意）
-              <input id="report-name" type="text" placeholder="山田 太郎" />
-            </label>
-            <label class="checkbox-label">
-              <input id="privacy-agree" type="checkbox" />
-              <a href="./privacy.html" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>に同意する
-            </label>
-            <button id="send-report-btn" class="btn btn-primary" type="button">結果をメールで受け取る</button>
+              <div class="prefill-info">
+                <p class="prefill-label">入力済みの情報</p>
+                <div class="prefill-row"><span>氏名:</span> <span id="reg-prefill-name"></span></div>
+                <div class="prefill-row"><span>企業名:</span> <span id="reg-prefill-company"></span></div>
+                <div class="prefill-row"><span>メール:</span> <span id="reg-prefill-email"></span></div>
+                <div class="prefill-row"><span>特許番号:</span> <span id="reg-prefill-patent"></span></div>
+              </div>
+
+              <form id="registration-form" class="reg-form">
+                <label class="form-field">
+                  <span class="form-label">部署</span>
+                  <input id="reg-department" name="department" type="text" placeholder="知財部" />
+                </label>
+                <label class="form-field">
+                  <span class="form-label">電話番号</span>
+                  <input id="reg-phone" name="phone" type="tel" placeholder="03-1234-5678" />
+                </label>
+                <label class="form-field">
+                  <span class="form-label">検討している支援方法</span>
+                  <select id="reg-support-method" name="supportMethod">
+                    <option value="">選択してください</option>
+                    <option value="license">ライセンス</option>
+                    <option value="sale">売却</option>
+                    <option value="both">両方</option>
+                  </select>
+                </label>
+                <label class="form-field">
+                  <span class="form-label">希望金額</span>
+                  <select id="reg-desired-price" name="desiredPrice">
+                    <option value="">選択してください</option>
+                    <option value="lt1m">〜100万円</option>
+                    <option value="1m-5m">100万〜500万円</option>
+                    <option value="5m-10m">500万〜1000万円</option>
+                    <option value="10m-50m">1000万〜5000万円</option>
+                    <option value="50m-100m">5000万〜1億円</option>
+                    <option value="gt100m">1億円以上</option>
+                    <option value="negotiable">応相談</option>
+                  </select>
+                </label>
+                <label class="checkbox-label">
+                  <input id="reg-privacy-agree" type="checkbox" />
+                  <a href="./privacy.html" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>に同意する
+                </label>
+                <button id="reg-submit-btn" class="btn btn-primary" type="submit">詳細レポートを申請する</button>
+              </form>
+              <div id="reg-status" class="reg-status hidden"></div>
+            </div>
           </div>
+          <section id="detailed-report" class="card hidden"></section>
         </div>
 
         <article class="benefit-box">
