@@ -509,9 +509,10 @@ function createExternalLink(href, text) {
 function renderResult(result) {
   const score = result.scores;
 
-  // カード内: アルファベットのみ
+  // カード内: 評価文言 + コメント
   appendChildren(scoreEl, [
-    createNode("p", { className: "rank-letter", text: score.rank })
+    createNode("p", { className: "rank-message", text: rankMessages[score.rank] || "" }),
+    createNode("p", { className: "score-comment", text: generateComment(score) })
   ]);
 
   // カード外: 判定基準テーブル + コメント
