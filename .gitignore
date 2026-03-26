@@ -5,3 +5,9 @@ node_modules/
 .vercel
 fonts/
 data/
+tmp/
+.claude/state/
+.claude/sessions/
+.claude/logs/
+.claude-code-harness/backups/
+supabase/.temp/
