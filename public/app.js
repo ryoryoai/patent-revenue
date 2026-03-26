@@ -709,6 +709,12 @@ if (regForm) {
   regForm.addEventListener("submit", async (e) => {
     e.preventDefault();
 
+    const publishCheck = document.getElementById("reg-patent-publish-agree");
+    if (publishCheck && !publishCheck.checked) {
+      showSystemMessage("特許情報の公開への同意が必要です。", "warn");
+      return;
+    }
+
     const privacyCheck = document.getElementById("reg-privacy-agree");
     if (privacyCheck && !privacyCheck.checked) {
       showSystemMessage("プライバシーポリシーに同意してください。", "warn");
