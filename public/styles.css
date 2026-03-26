@@ -602,10 +602,17 @@ h3 {
 
 .rank-message {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--primary);
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.6;
+}
+
+.score-comment {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.7;
 }
 
 .title {

@@ -508,13 +508,11 @@ function createExternalLink(href, text) {
 
 function renderResult(result) {
   const score = result.scores;
+  const comment = generateComment(score);
   appendChildren(scoreEl, [
-    createNode("p", { className: "score-label", text: "Patent Value Score" }),
-    createNode("p", { className: "score-main", text: String(score.total) }),
-    createNode("p", { className: "rank-message", text: rankMessages[score.rank] || "" })
+    createNode("p", { className: "rank-message", text: rankMessages[score.rank] || "" }),
+    createNode("p", { className: "score-comment", text: comment })
   ]);
-
-  // join-link は外部リンクを廃止。メール経由の案内に変更。
 }
 
 
@@ -607,33 +605,6 @@ diagnosisForm.addEventListener("submit", async (event) => {
 
     renderResult(latestResult);
     showResultScreen();
-
-    // 診断成功後、自動で簡易レポートをメール送信（バックグラウンド）
-    if (leadEmail) {
-      fetch("/api/send-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          email: leadEmail,
-          name: leadName,
-          resultId: latestResult.resultId,
-          leadId: latestResult.leadId || undefined,
-          reportData: {
-            patent: latestResult.patent,
-            scores: latestResult.scores,
-            valueRange: latestResult.valueRange,
-            route: latestResult.route,
-            rank: latestResult.scores?.rank,
-            rankMessage: rankMessages[latestResult.scores?.rank] || ""
-          }
-        })
-      }).then(() => {
-        console.log("[auto-email] report sent to", leadEmail);
-      }).catch((err) => {
-        console.warn("[auto-email] failed:", err.message);
-      });
-    }
 
     trackEvent("diagnosis_success", {
       result_id: latestResult.resultId,
