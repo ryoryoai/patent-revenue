@@ -37,9 +37,9 @@ const publicDir = path.join(__dirname, "public");
 const isProduction = process.env.NODE_ENV === "production";
 
 const QUOTA_PER_DAY = Number(process.env.ANON_DAILY_QUOTA || 5);
-const BURST_INTERVAL_MS = Number(process.env.BURST_INTERVAL_MS || 15_000);
-const PER_MIN_LIMIT = Number(process.env.PER_MIN_LIMIT || 3);
-const COOLDOWN_MS = Number(process.env.COOLDOWN_MS || 5 * 60_000);
+const BURST_INTERVAL_MS = Number(process.env.BURST_INTERVAL_MS || 5_000);
+const PER_MIN_LIMIT = Number(process.env.PER_MIN_LIMIT || 6);
+const COOLDOWN_MS = Number(process.env.COOLDOWN_MS || 60_000);
 const CACHE_TTL_MS = Number(process.env.CACHE_TTL_MS || 30 * 24 * 60 * 60_000);
 const BODY_LIMIT_BYTES = Number(process.env.BODY_LIMIT_BYTES || 4 * 1024);
 const GLOBAL_DAY_LIMIT = Number(process.env.GLOBAL_DAY_LIMIT || 3_000);
@@ -53,7 +53,7 @@ function getAdminCsp() {
 
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
-const CAPTCHA_REQUIRED_TTL_MS = Number(process.env.CAPTCHA_REQUIRED_TTL_MS || 10 * 60_000);
+const CAPTCHA_REQUIRED_TTL_MS = Number(process.env.CAPTCHA_REQUIRED_TTL_MS || 3 * 60_000);
 
 const EDGE_SHARED_SECRET = (process.env.EDGE_SHARED_SECRET || "").trim();
 const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
@@ -1180,17 +1180,28 @@ async function handler(req, res) {
       });
       console.log(`[request-detailed-report] sendDetailedReportEmail done: ${patentId}`, JSON.stringify(pdfInfo));
 
-      // DB保存（非同期・非ブロッキング）
-      findLeadByEmail(email).then(lead => {
-        if (!lead) return;
-        updateLeadStatus(lead.id, "detail_started");
-        saveDetailedReportRequest({
-          leadId: lead.id,
-          patentId,
-          rank: result.rank,
-          source: result.source
-        });
-      }).catch(err => console.warn("[request-detailed-report] DB save failed:", err.message));
+      // DB保存（ブロッキング）
+      try {
+        let lead = await findLeadByEmail(email);
+        if (!lead) {
+          console.log(`[request-detailed-report] lead not found for ${email}, creating new lead`);
+          lead = await saveLead({ name: name || "", companyName: "", email, source: "detailed-report" });
+        }
+        if (lead) {
+          await updateLeadStatus(lead.id, "detail_started");
+          await saveDetailedReportRequest({
+            leadId: lead.id,
+            patentId,
+            rank: result.rank,
+            source: result.source
+          });
+          console.log(`[request-detailed-report] DB save success: leadId=${lead.id}`);
+        } else {
+          console.error(`[request-detailed-report] failed to find or create lead for ${email}`);
+        }
+      } catch (dbErr) {
+        console.error("[request-detailed-report] DB save failed:", dbErr.message);
+      }
 
       logRequest({
         requestId,
