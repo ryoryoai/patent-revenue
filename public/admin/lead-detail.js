@@ -117,3 +117,15 @@ async function saveNotes() {
     alert("保存に失敗しました");
   }
 }
+
+async function deleteLead() {
+  const name = currentLead?.name || "このリード";
+  if (!confirm(`「${name}」を削除しますか？\n関連する特許・登録データも全て削除されます。この操作は取り消せません。`)) return;
+  try {
+    await adminFetch(`/api/admin/leads/${leadId}`, { method: "DELETE" });
+    alert("削除しました");
+    window.location.href = "/admin/dashboard.html";
+  } catch (err) {
+    alert("削除に失敗しました");
+  }
+}

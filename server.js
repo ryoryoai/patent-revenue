@@ -675,7 +675,7 @@ async function handler(req, res) {
     if (req.method === "OPTIONS") {
       applyApiCors(req, res);
       res.writeHead(204, {
-        "Access-Control-Allow-Methods": "POST, GET, PATCH, OPTIONS",
+        "Access-Control-Allow-Methods": "POST, GET, PATCH, DELETE, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, X-Metrics-Key, Authorization"
       });
       res.end();
@@ -791,6 +791,14 @@ async function handler(req, res) {
         const { error } = await supabase.from("leads").update(updates).eq("id", leadId);
         if (error) { respondJson(req, res, 500, { requestId, message: "update failed" }); return; }
         respondJson(req, res, 200, { requestId, message: "updated" });
+        return;
+      }
+
+      if (req.method === "DELETE") {
+        // CASCADE: patents, detail_registrations, tokens are auto-deleted
+        const { error } = await supabase.from("leads").delete().eq("id", leadId);
+        if (error) { respondJson(req, res, 500, { requestId, message: "delete failed" }); return; }
+        respondJson(req, res, 200, { requestId, message: "deleted" });
         return;
       }
     }
