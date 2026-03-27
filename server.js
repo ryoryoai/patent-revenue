@@ -1,4 +1,5 @@
 require("dotenv").config();
+const Sentry = require("./lib/sentry");
 const http = require("http");
 const https = require("https");
 const path = require("path");
@@ -485,14 +486,22 @@ function applyApiCors(req, res) {
 }
 
 function respondJson(req, res, status, payload) {
+  if (status >= 500) {
+    Sentry.captureEvent({
+      message: payload.message || "server error",
+      level: "error",
+      extra: { status, url: req.url, method: req.method, requestId: payload.requestId },
+    });
+  }
   sendJson(req, res, status, payload, { applyCors: applyApiCors });
 }
 
 function validateQuery(query) {
   const text = String(query || "").trim();
   if (!text) return { ok: false, message: "query is required" };
-  if (text.length > 200) return { ok: false, message: "query too long" };
-  if (/[\x00-\x1F\x7F]/.test(text)) return { ok: false, message: "invalid characters" };
+  if (!/^\d{7}$/.test(text)) {
+    return { ok: false, message: "登録済み特許の7桁の番号を入力してください。出願番号（特願〜）は対象外です。" };
+  }
   return { ok: true, text };
 }
 
@@ -1535,6 +1544,7 @@ async function handler(req, res) {
   sendFile(res, filePath);
   } catch (err) {
     console.error("[handler] uncaught:", err);
+    Sentry.captureException(err, { extra: { url: req.url, method: req.method } });
     maybeSendAlert("uncaught_error", { url: req.url, message: err.message, error: err.stack?.split("\n").slice(0, 5).join(" ") });
     if (!res.headersSent) {
       respondJson(req, res, 500, { message: "internal server error" });

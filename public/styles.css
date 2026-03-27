@@ -267,6 +267,12 @@ h3 {
   color: var(--ink-soft);
 }
 
+.form-hint {
+  font-size: 12px;
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+
 .hero-form-extended input {
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);

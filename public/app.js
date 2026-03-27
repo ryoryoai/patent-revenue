@@ -582,7 +582,13 @@ diagnosisForm.addEventListener("submit", async (event) => {
   };
 
   if (!input.query) {
-    showSystemMessage("特許番号・公開番号・キーワードを入力してください。", "warn");
+    showSystemMessage("特許番号を入力してください。", "warn");
+    _diagnosisInFlight = false;
+    return;
+  }
+  if (!/^\d{7}$/.test(input.query)) {
+    showSystemMessage("登録済み特許の7桁の番号を入力してください。出願番号（特願〜）は対象外です。", "warn");
+    _diagnosisInFlight = false;
     return;
   }
 
@@ -593,9 +599,7 @@ diagnosisForm.addEventListener("submit", async (event) => {
   submitButton.classList.add("btn-loading");
   submitButton.textContent = "診断しています…";
 
-  trackEvent("diagnosis_start", {
-    query_type: normalizePatentNumber(input.query).length >= 6 ? "number" : "keyword"
-  });
+  trackEvent("diagnosis_start", { query_type: "number" });
 
   try {
     const diagnosis = await fetchPatentInfo(input.query, captchaToken, {
