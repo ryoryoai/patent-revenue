@@ -1,3 +1,41 @@
+// --- Lightweight Sentry client-side error reporter ---
+const _sentryDsn = "https://2223b10cea7848f2e9b5e291cba1fd86@o4510499822960640.ingest.us.sentry.io/4511115683037184";
+function reportError(error, context = {}) {
+  try {
+    const url = new URL(_sentryDsn);
+    const projectId = url.pathname.replace("/", "");
+    const publicKey = url.username;
+    const host = url.hostname;
+    const eventId = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, "0")).join("");
+    const event = {
+      event_id: eventId,
+      timestamp: Date.now() / 1000,
+      platform: "javascript",
+      level: context.level || "error",
+      environment: location.hostname === "localhost" ? "development" : "production",
+      transaction: context.action || location.pathname,
+      tags: { action: context.action || "unknown", ...(context.tags || {}) },
+      exception: error instanceof Error ? {
+        values: [{ type: error.name, value: error.message, stacktrace: { frames: (error.stack || "").split("\n").slice(1, 8).map(l => ({ filename: l.trim(), function: "?" })).reverse() } }]
+      } : undefined,
+      message: error instanceof Error ? undefined : { formatted: String(error) },
+      extra: { userAgent: navigator.userAgent, url: location.href, ...context },
+      request: { url: location.href, headers: { "User-Agent": navigator.userAgent } },
+    };
+    const header = JSON.stringify({ event_id: eventId, dsn: _sentryDsn, sent_at: new Date().toISOString() });
+    const itemHeader = JSON.stringify({ type: "event", length: 0 });
+    const body = `${header}\n${itemHeader}\n${JSON.stringify(event)}`;
+    fetch(`https://${host}/api/${projectId}/envelope/`, {
+      method: "POST",
+      body,
+      headers: { "Content-Type": "application/x-sentry-envelope", "X-Sentry-Auth": `Sentry sentry_version=7,sentry_client=patent-revenue-browser/1.0,sentry_key=${publicKey}` },
+      keepalive: true
+    }).catch(() => {});
+  } catch { /* never block UI */ }
+}
+window.addEventListener("error", (e) => reportError(e.error || e.message, { action: "uncaught_error" }));
+window.addEventListener("unhandledrejection", (e) => reportError(e.reason || "unhandled rejection", { action: "unhandled_promise" }));
+
 const mockPatents = {
   "7091234": {
     id: "7091234",
@@ -658,6 +696,7 @@ diagnosisForm.addEventListener("submit", async (event) => {
     });
   } catch (error) {
     console.error(error);
+    reportError(error, { action: "diagnosis", status: error.status, query: input.query });
     if (error.status === 429) {
       if (error.payload?.reason === "captcha_required") {
         showSystemMessage("アクセス保護のため追加認証が必要です。CAPTCHAを完了後、再度診断してください。", "warn");
@@ -782,11 +821,13 @@ if (regForm) {
         regForm.style.display = "none";
         trackEvent("detailed_report_requested", { patent_id: patentId });
       } else {
+        reportError(data.message || "detailed_report_api_error", { action: "detailed_report_response", status: res.status, patentId });
         statusEl.className = "reg-status error";
         statusEl.textContent = data.message || "申請に失敗しました。";
         statusEl.classList.remove("hidden");
       }
     } catch (err) {
+      reportError(err, { action: "detailed_report", patentId });
       statusEl.className = "reg-status error";
       statusEl.textContent = "通信エラーが発生しました。";
       statusEl.classList.remove("hidden");
