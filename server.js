@@ -18,7 +18,7 @@ const {
   sendJson
 } = require("./lib/http-utils");
 const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail, sendErrorAlertEmail } = require("./lib/mailer");
-const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
+const { lookupPatent } = require("./lib/patent-data");
 const { researchPatent, PatentInvalidError } = require("./lib/patent-research");
 const { fetchPatentStatus } = require("./lib/patent-api");
 const { saveLead, savePatent, updateLeadStatus, findLeadByEmail, saveDetailedReportRequest, getSupabase } = require("./lib/supabase");
@@ -536,8 +536,7 @@ async function verifyTurnstileToken(token, clientIp) {
 }
 
 async function getDiagnosis(query, requestId) {
-  const normalized = normalizePatentNumber(query);
-  const cacheKey = (normalized || query).toLowerCase();
+  const cacheKey = query.toLowerCase();
   const cached = resultCache.get(cacheKey);
   const now = Date.now();
 
@@ -933,6 +932,7 @@ async function handler(req, res) {
     return;
    } catch (adminErr) {
     console.error("[admin] uncaught error:", adminErr);
+    Sentry.captureException(adminErr, { extra: { requestId, url: req.url } });
     maybeSendAlert("admin_error", { requestId, url: req.url, message: adminErr.message, error: adminErr.stack?.split("\n").slice(0, 3).join(" ") });
     respondJson(req, res, 500, { requestId, message: "admin error", detail: String(adminErr?.message || adminErr) });
     return;
@@ -1186,6 +1186,7 @@ async function handler(req, res) {
         if (error && error.stack) {
           console.error("[request-detailed-report] stack:", error.stack);
         }
+        Sentry.captureException(error, { extra: { requestId, url: req.url, patentId } });
         maybeSendAlert("detailed_report_error", { requestId, url: req.url, message: error.message, error: error.stack?.split("\n").slice(0, 3).join(" ") });
         logRequest({
           requestId,
@@ -1430,7 +1431,7 @@ async function handler(req, res) {
     const leadName = String(body.name || "").trim().slice(0, 100);
     const leadCompany = String(body.company || "").trim().slice(0, 100);
     const leadEmail = String(body.email || "").trim().slice(0, 200);
-    const normalizedPatentNumber = normalizePatentNumber(validated.text);
+    const normalizedPatentNumber = validated.text;
 
     let leadId = null;
     if (leadEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail)) {
@@ -1521,6 +1522,7 @@ async function handler(req, res) {
       }
 
       metrics.errors5xx += 1;
+      Sentry.captureException(error, { extra: { requestId, url: req.url } });
       maybeSendAlert("diagnose_error", { requestId, url: req.url, message: error.message, error: error.stack?.split("\n").slice(0, 3).join(" ") });
       respondJson(req, res, 500, {
         requestId,
