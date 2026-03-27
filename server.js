@@ -16,7 +16,7 @@ const {
   sendFile,
   sendJson
 } = require("./lib/http-utils");
-const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail } = require("./lib/mailer");
+const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail, sendErrorAlertEmail } = require("./lib/mailer");
 const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
 const { researchPatent, PatentInvalidError } = require("./lib/patent-research");
 const { fetchPatentStatus } = require("./lib/patent-api");
@@ -56,6 +56,9 @@ const CAPTCHA_REQUIRED_TTL_MS = Number(process.env.CAPTCHA_REQUIRED_TTL_MS || 10
 
 const EDGE_SHARED_SECRET = (process.env.EDGE_SHARED_SECRET || "").trim();
 const ALERT_WEBHOOK_URL = process.env.ALERT_WEBHOOK_URL || "";
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",").map(e => e.trim()).filter(Boolean);
+const ERROR_ALERT_COOLDOWN_MS = Number(process.env.ERROR_ALERT_COOLDOWN_MS || 5 * 60_000);
+const _alertSentAt = new Map();
 const HASH_SECRET = resolveSecret("HASH_SECRET", "pvc-dev-secret", { isProduction });
 const METRICS_API_KEY = resolveSecret("METRICS_API_KEY", "dev-metrics-key", { isProduction });
 const ALLOWED_ORIGINS = parseOriginList(process.env.ALLOWED_ORIGINS, DEFAULT_ALLOWED_ORIGINS);
@@ -321,39 +324,56 @@ function checkAndConsumeUserQuota(identifier, captchaPassed) {
 }
 
 function maybeSendAlert(type, payload) {
+  const now = Date.now();
   const message = {
-    at: new Date().toISOString(),
+    at: new Date(now).toISOString(),
     service: "patent-value-check",
     type,
     ...payload
   };
 
-  if (!ALERT_WEBHOOK_URL) {
-    console.warn("[alert]", JSON.stringify(message));
-    return;
+  // Webhook送信
+  if (ALERT_WEBHOOK_URL) {
+    const endpoint = new URL(ALERT_WEBHOOK_URL);
+    const data = JSON.stringify(message);
+    const client = endpoint.protocol === "https:" ? https : http;
+    const req = client.request(
+      {
+        method: "POST",
+        hostname: endpoint.hostname,
+        port: endpoint.port || (endpoint.protocol === "https:" ? 443 : 80),
+        path: `${endpoint.pathname}${endpoint.search}`,
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(data)
+        }
+      },
+      (res) => { res.resume(); }
+    );
+    req.on("error", (error) => console.warn("alert_send_failed", error.message));
+    req.write(data);
+    req.end();
   }
 
-  const endpoint = new URL(ALERT_WEBHOOK_URL);
-  const data = JSON.stringify(message);
-  const client = endpoint.protocol === "https:" ? https : http;
-  const req = client.request(
-    {
-      method: "POST",
-      hostname: endpoint.hostname,
-      port: endpoint.port || (endpoint.protocol === "https:" ? 443 : 80),
-      path: `${endpoint.pathname}${endpoint.search}`,
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(data)
-      }
-    },
-    (res) => {
-      res.resume();
+  // メール送信（同一typeに対して5分間クールダウン）
+  if (ADMIN_EMAILS.length > 0) {
+    const lastSent = _alertSentAt.get(type) || 0;
+    if (now - lastSent >= ERROR_ALERT_COOLDOWN_MS) {
+      _alertSentAt.set(type, now);
+      sendErrorAlertEmail({
+        to: ADMIN_EMAILS,
+        errorType: type,
+        message: payload.message || payload.error || JSON.stringify(payload),
+        requestId: payload.requestId,
+        url: payload.url,
+        timestamp: message.at
+      }).catch(err => console.warn("[alert-email] send failed:", err.message));
     }
-  );
-  req.on("error", (error) => console.warn("alert_send_failed", error.message));
-  req.write(data);
-  req.end();
+  }
+
+  if (!ALERT_WEBHOOK_URL && ADMIN_EMAILS.length === 0) {
+    console.warn("[alert]", JSON.stringify(message));
+  }
 }
 
 function p95(samples) {
@@ -904,6 +924,7 @@ async function handler(req, res) {
     return;
    } catch (adminErr) {
     console.error("[admin] uncaught error:", adminErr);
+    maybeSendAlert("admin_error", { requestId, url: req.url, message: adminErr.message, error: adminErr.stack?.split("\n").slice(0, 3).join(" ") });
     respondJson(req, res, 500, { requestId, message: "admin error", detail: String(adminErr?.message || adminErr) });
     return;
    }
@@ -1156,6 +1177,7 @@ async function handler(req, res) {
         if (error && error.stack) {
           console.error("[request-detailed-report] stack:", error.stack);
         }
+        maybeSendAlert("detailed_report_error", { requestId, url: req.url, message: error.message, error: error.stack?.split("\n").slice(0, 3).join(" ") });
         logRequest({
           requestId,
           type: "request_detailed_report_error",
@@ -1489,6 +1511,7 @@ async function handler(req, res) {
       }
 
       metrics.errors5xx += 1;
+      maybeSendAlert("diagnose_error", { requestId, url: req.url, message: error.message, error: error.stack?.split("\n").slice(0, 3).join(" ") });
       respondJson(req, res, 500, {
         requestId,
         message: "diagnose failed"
@@ -1511,6 +1534,7 @@ async function handler(req, res) {
   sendFile(res, filePath);
   } catch (err) {
     console.error("[handler] uncaught:", err);
+    maybeSendAlert("uncaught_error", { url: req.url, message: err.message, error: err.stack?.split("\n").slice(0, 5).join(" ") });
     if (!res.headersSent) {
       respondJson(req, res, 500, { message: "internal server error" });
     }
