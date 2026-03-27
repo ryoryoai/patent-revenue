@@ -21,7 +21,7 @@ const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail, sendEr
 const { lookupPatent } = require("./lib/patent-data");
 const { researchPatent, enrichMetricsWithLlm, inferCategory, computeRoyaltyRange, computeScoresAndRank, PatentInvalidError } = require("./lib/patent-research");
 const { fetchPatentStatus } = require("./lib/patent-api");
-const { saveLead, savePatent, updateLeadStatus, findLeadByEmail, saveDetailedReportRequest, getSupabase } = require("./lib/supabase");
+const { saveLead, savePatent, updateLeadStatus, findLeadByEmail, saveDetailedReportRequest, updateDetailRegistrationStatus, getSupabase } = require("./lib/supabase");
 const { generateAndSaveToken, verifyAndGetData, saveRegistration } = require("./lib/detail-registration");
 const {
   investigateAndRank,
@@ -1186,13 +1186,16 @@ async function handler(req, res) {
         }
         if (lead) {
           await updateLeadStatus(lead.id, "detail_started");
-          await saveDetailedReportRequest({
+          const reg = await saveDetailedReportRequest({
             leadId: lead.id,
             patentId,
             rank: result.rank,
             source: result.source
           });
-          console.log(`[request-detailed-report] DB save success: leadId=${lead.id}`);
+          if (reg?.id) {
+            await updateDetailRegistrationStatus(reg.id, "reviewed");
+          }
+          console.log(`[request-detailed-report] DB save success: leadId=${lead.id}, regId=${reg?.id}`);
         } else {
           console.error(`[request-detailed-report] failed to find or create lead for ${email}`);
         }
