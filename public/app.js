@@ -669,7 +669,11 @@ diagnosisForm.addEventListener("submit", async (event) => {
       return;
     }
 
-    const scores = computeScores(patent, input);
+    // サーバーがスコア・ランクを返していればそれを使う（LLM補完済み）
+    // フォールバック: ローカル計算
+    const scores = diagnosis.scores
+      ? { ...diagnosis.scores, rank: diagnosis.rank || diagnosis.scores.rank || getRank(diagnosis.scores, input) }
+      : computeScores(patent, input);
     const valueRange = estimateValueRange(patent, scores, input);
     const route = decideRoute(scores, input);
 

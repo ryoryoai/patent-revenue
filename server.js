@@ -542,9 +542,13 @@ async function getDiagnosis(query, requestId) {
 
   if (cached && cached.expiresAt > now) {
     metrics.cacheHit += 1;
+    // _jpoRaw をクライアントに返さない
+    const { _jpoRaw, ...cachedPatent } = cached.patent || {};
     return {
       resultId: `cache_${hashValue(cacheKey).slice(0, 10)}`,
-      patent: cached.patent,
+      patent: cached.patent ? cachedPatent : null,
+      scores: cached.scores || undefined,
+      rank: cached.rank || undefined,
       invalid: cached.invalid || false,
       meta: {
         mode: "api",
@@ -650,8 +654,13 @@ async function getDiagnosis(query, requestId) {
     console.warn("[diagnose] LLM metrics enrichment failed, using raw metrics:", err.message);
   }
 
+  // カテゴリ推定 + サーバー側スコアリング
+  if (!rawPatent.category) rawPatent.category = inferCategory(rawPatent);
+  const royaltyRange = computeRoyaltyRange(rawPatent);
+  const { scores, rank } = computeScoresAndRank(rawPatent, royaltyRange);
+
   // 補完後のデータをキャッシュに上書き
-  resultCache.set(cacheKey, { patent: rawPatent, expiresAt: Date.now() + CACHE_TTL_MS });
+  resultCache.set(cacheKey, { patent: rawPatent, scores, rank, expiresAt: Date.now() + CACHE_TTL_MS });
 
   // _jpoRaw はサーバー内部用なのでクライアントには返さない
   const { _jpoRaw, ...patent } = rawPatent;
@@ -659,6 +668,8 @@ async function getDiagnosis(query, requestId) {
   return {
     resultId: `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     patent,
+    scores,
+    rank,
     meta: {
       mode: "api",
       cacheHit: false,
