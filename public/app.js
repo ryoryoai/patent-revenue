@@ -816,10 +816,11 @@ if (regForm) {
     // Labor Illusion: 段階的ステータスで信頼性向上
     const _reportSteps = [
       { at: 0, text: "特許データを照会中…" },
-      { at: 2000, text: "AIが詳細分析を実行中…" },
+      { at: 2500, text: "AIが詳細分析を実行中…" },
       { at: 5000, text: "評価レポートを生成中…" },
-      { at: 10000, text: "PDFを作成中…" },
-      { at: 20000, text: "もうしばらくお待ちください…" },
+      { at: 8000, text: "PDFを作成中…" },
+      { at: 15000, text: "もう少しで完了します…" },
+      { at: 30000, text: "大規模な分析を実行中…" },
     ];
     let _rStepIdx = 0;
     const _rStart = Date.now();
@@ -853,7 +854,7 @@ if (regForm) {
 
       const data = await res.json();
       const _rTotalElapsed = Date.now() - _rStart;
-      if (_rTotalElapsed < 4000) await new Promise(r => setTimeout(r, 4000 - _rTotalElapsed));
+      if (_rTotalElapsed < 8000) await new Promise(r => setTimeout(r, 8000 - _rTotalElapsed));
 
       if (res.ok) {
         statusEl.className = "reg-status success";
