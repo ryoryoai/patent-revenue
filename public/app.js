@@ -628,19 +628,33 @@ diagnosisForm.addEventListener("submit", async (event) => {
   const originalText = submitButton.textContent;
   submitButton.disabled = true;
   submitButton.classList.add("btn-loading");
-  submitButton.textContent = "診断しています…";
+
+  // Labor Illusion: 段階的ステータス表示で信頼性向上（Harvard Business School, Buell & Norton 2011）
+  const _MIN_DISPLAY_MS = 4000;
+  const _statusSteps = [
+    { at: 0, text: "特許データベースを照会しています…" },
+    { at: 1500, text: "JPO公式データを取得中…" },
+    { at: 3000, text: "AIが特許価値を分析しています…" },
+  ];
+  let _stepIdx = 0;
+  submitButton.textContent = _statusSteps[0].text;
+  const _diagStart = Date.now();
+  const _stepTimer = setInterval(() => {
+    const elapsed = Date.now() - _diagStart;
+    while (_stepIdx < _statusSteps.length - 1 && elapsed >= _statusSteps[_stepIdx + 1].at) _stepIdx++;
+    submitButton.textContent = _statusSteps[_stepIdx].text;
+  }, 200);
 
   trackEvent("diagnosis_start", { query_type: "number" });
 
   try {
-    const _diagStart = Date.now();
     const diagnosis = await fetchPatentInfo(input.query, captchaToken, {
       name: leadName,
       company: leadCompany,
       email: leadEmail
     });
     const _elapsed = Date.now() - _diagStart;
-    if (_elapsed < 2000) await new Promise(r => setTimeout(r, 2000 - _elapsed));
+    if (_elapsed < _MIN_DISPLAY_MS) await new Promise(r => setTimeout(r, _MIN_DISPLAY_MS - _elapsed));
     captchaToken = "";
     if (turnstileWidgetId !== null && window.turnstile) {
       window.turnstile.reset(turnstileWidgetId);
@@ -722,6 +736,7 @@ diagnosisForm.addEventListener("submit", async (event) => {
       showSystemMessage("診断に失敗しました。時間をおいて再度お試しください。", "error");
     }
   } finally {
+    clearInterval(_stepTimer);
     _diagnosisInFlight = false;
     submitButton.classList.remove("btn-loading");
     submitButton.disabled = false;
