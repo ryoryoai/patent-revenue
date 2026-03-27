@@ -1393,7 +1393,7 @@ async function handler(req, res) {
     if (leadEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail)) {
       const ts = body.trafficSource || {};
       const utmSource = String(ts.utm?.utm_source || "").slice(0, 100) || null;
-      const source = utmSource || "patent-value-check";
+      const source = utmSource || "patent-value-analyzer";
       const leadRecord = await saveLead({
         name: leadName,
         companyName: leadCompany,
