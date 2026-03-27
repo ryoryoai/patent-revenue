@@ -19,7 +19,7 @@ const {
 } = require("./lib/http-utils");
 const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail, sendErrorAlertEmail } = require("./lib/mailer");
 const { lookupPatent } = require("./lib/patent-data");
-const { researchPatent, PatentInvalidError } = require("./lib/patent-research");
+const { researchPatent, enrichMetricsWithLlm, inferCategory, computeRoyaltyRange, computeScoresAndRank, PatentInvalidError } = require("./lib/patent-research");
 const { fetchPatentStatus } = require("./lib/patent-api");
 const { saveLead, savePatent, updateLeadStatus, findLeadByEmail, saveDetailedReportRequest, getSupabase } = require("./lib/supabase");
 const { generateAndSaveToken, verifyAndGetData, saveRegistration } = require("./lib/detail-registration");
@@ -247,7 +247,7 @@ function checkAndConsumeUserQuota(identifier, captchaPassed) {
     state.violationCount = Math.max(state.violationCount - 2, 0);
   }
 
-  if (now < state.captchaRequiredUntil && !captchaPassed) {
+  if (TURNSTILE_SITE_KEY && now < state.captchaRequiredUntil && !captchaPassed) {
     return {
       ok: false,
       reason: "captcha_required",
@@ -642,6 +642,16 @@ async function getDiagnosis(query, requestId) {
       meta: { mode: "api", cacheHit: false, requestId }
     };
   }
+
+  // LLMでメトリクスを補完（フロントのスコア計算精度を向上）
+  try {
+    await enrichMetricsWithLlm(rawPatent);
+  } catch (err) {
+    console.warn("[diagnose] LLM metrics enrichment failed, using raw metrics:", err.message);
+  }
+
+  // 補完後のデータをキャッシュに上書き
+  resultCache.set(cacheKey, { patent: rawPatent, expiresAt: Date.now() + CACHE_TTL_MS });
 
   // _jpoRaw はサーバー内部用なのでクライアントには返さない
   const { _jpoRaw, ...patent } = rawPatent;
