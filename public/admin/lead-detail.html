@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="supabase-url" content="https://sukemwnslhkehatwvdqd.supabase.co">
+  <meta name="supabase-anon-key" content="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1a2Vtd25zbGhrZWhhdHd2ZHFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDM1MjUsImV4cCI6MjA5MDAxOTUyNX0.-AxVOi1ZL7UouogJMt9aoEwyWu5cxMm101MyNn1oE_w">
+  <title>リード詳細 - Patent Value Checker Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <header class="admin-header">
+    <h1>Patent Value Checker Admin</h1>
+    <div class="user-info">
+      <span id="userEmail"></span>
+      <button class="btn-logout" onclick="logout()">ログアウト</button>
+    </div>
+  </header>
+
+  <div class="admin-container">
+    <div class="detail-header">
+      <a href="/admin/dashboard.html">&larr; ダッシュボードに戻る</a>
+    </div>
+
+    <div class="detail-grid" id="detailGrid">
+      <!-- Lead info -->
+      <div class="card" id="leadCard">
+        <h2>リード情報</h2>
+        <div id="leadInfo">読み込み中...</div>
+      </div>
+
+      <!-- Patent info -->
+      <div class="card" id="patentCard">
+        <h2>特許情報</h2>
+        <div id="patentInfo">-</div>
+      </div>
+
+      <!-- Actions -->
+      <div class="card">
+        <h2>アクション</h2>
+        <div class="field">
+          <div class="label">ステータス変更</div>
+          <select class="status-select" id="statusSelect">
+            <option value="created">作成済み</option>
+            <option value="submitted">診断済み</option>
+            <option value="emailed">メール送信済み</option>
+            <option value="detail_started">詳細レポート開始</option>
+            <option value="detail_submitted">詳細レポート送信済み</option>
+            <option value="contacted">連絡済み</option>
+            <option value="converted">成約</option>
+            <option value="closed">クローズ</option>
+          </select>
+          <button class="btn btn-primary btn-sm" style="margin-left:8px" onclick="updateStatus()">更新</button>
+        </div>
+        <div class="field" style="margin-top:16px">
+          <div class="label">管理者メモ</div>
+          <textarea class="notes-area" id="adminNotes" placeholder="担当者メモを入力..."></textarea>
+          <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="saveNotes()">メモ保存</button>
+        </div>
+      </div>
+
+      <!-- Registrations -->
+      <div class="card" id="regCard">
+        <h2>詳細登録</h2>
+        <div id="regInfo">-</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/admin/vendor/supabase.min.js"></script>
+  <script src="/admin/admin.js"></script>
+  <script src="/admin/lead-detail.js"></script>
+</body>
+</html>

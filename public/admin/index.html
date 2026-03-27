@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="supabase-url" content="https://sukemwnslhkehatwvdqd.supabase.co">
+  <meta name="supabase-anon-key" content="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1a2Vtd25zbGhrZWhhdHd2ZHFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDM1MjUsImV4cCI6MjA5MDAxOTUyNX0.-AxVOi1ZL7UouogJMt9aoEwyWu5cxMm101MyNn1oE_w">
+  <title>Admin Login - Patent Value Checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <h1>Patent Value Checker<br>管理画面</h1>
+      <div class="login-error" id="loginError"></div>
+      <form id="loginForm">
+        <label for="email">メールアドレス</label>
+        <input type="email" id="email" required autocomplete="email">
+        <label for="password">パスワード</label>
+        <input type="password" id="password" required autocomplete="current-password">
+        <button type="submit" class="btn btn-primary" id="loginBtn">ログイン</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/admin/vendor/supabase.min.js"></script>
+  <script src="/admin/admin.js"></script>
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const errEl = document.getElementById("loginError");
+      const btn = document.getElementById("loginBtn");
+      errEl.style.display = "none";
+      btn.disabled = true;
+      btn.textContent = "ログイン中...";
+
+      try {
+        const sb = getSupabase();
+        if (!sb) throw new Error("Supabase設定が見つかりません");
+
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+
+        window.location.href = "/admin/dashboard.html";
+      } catch (err) {
+        errEl.textContent = err.message || "ログインに失敗しました";
+        errEl.style.display = "block";
+        btn.disabled = false;
+        btn.textContent = "ログイン";
+      }
+    });
+
+    // Already logged in -> redirect
+    (async () => {
+      if (await checkAuth()) window.location.href = "/admin/dashboard.html";
+    })();
+  </script>
+</body>
+</html>

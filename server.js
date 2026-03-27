@@ -46,7 +46,9 @@ const GLOBAL_HOUR_LIMIT = Number(process.env.GLOBAL_HOUR_LIMIT || 500);
 const REQUEST_TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 4_500);
 const DEFAULT_ALLOWED_ORIGINS = ["https://ryoryoai.github.io"];
 const CONTENT_SECURITY_POLICY = "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
-const ADMIN_CSP = `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ${process.env.SUPABASE_URL || "https://*.supabase.co"}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`;
+function getAdminCsp() {
+  return "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://sukemwnslhkehatwvdqd.supabase.co; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+}
 
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || "";
@@ -446,7 +448,7 @@ function applySecurityHeaders(req, res, requestId) {
   const isAdmin = (req.url || "").startsWith("/admin/") || (req.url || "").startsWith("/api/admin/");
   res.setHeader(
     "Content-Security-Policy",
-    isAdmin ? ADMIN_CSP : CONTENT_SECURITY_POLICY
+    isAdmin ? getAdminCsp() : CONTENT_SECURITY_POLICY
   );
 
   if (req.headers["x-forwarded-proto"] === "https" || req.socket.encrypted) {
@@ -626,6 +628,7 @@ function logRequest(info) {
 async function handler(req, res) {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
+  try {
   applySecurityHeaders(req, res, requestId);
 
   if (req.url && req.url.startsWith("/api/")) {
@@ -644,7 +647,7 @@ async function handler(req, res) {
     if (req.method === "OPTIONS") {
       applyApiCors(req, res);
       res.writeHead(204, {
-        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+        "Access-Control-Allow-Methods": "POST, GET, PATCH, OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type, X-Metrics-Key, Authorization"
       });
       res.end();
@@ -674,9 +677,11 @@ async function handler(req, res) {
     return;
   }
 
-  // 管理API: 特許リスト取得
-  if (req.method === "GET" && req.url?.startsWith("/api/admin/patents")) {
-    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+  // ─── 管理API 共通認証 ───
+  if (req.url?.startsWith("/api/admin/")) {
+   try {
+    const auth = await verifyAdminAuth(req);
+    if (!auth.ok) {
       metrics.errors4xx += 1;
       respondJson(req, res, 403, { requestId, message: "forbidden" });
       return;
@@ -688,123 +693,220 @@ async function handler(req, res) {
       return;
     }
 
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const status = url.searchParams.get("status") || null;
-    const limit = Math.min(Number(url.searchParams.get("limit") || 100), 500);
-    const offset = Number(url.searchParams.get("offset") || 0);
+    const adminUrl = new URL(req.url, `http://${req.headers.host}`);
 
-    let query = supabase
-      .from("patents")
-      .select("id, patent_number, normalized_number, title, category, applicant, ipc_codes, status, diagnosis_result, created_at, updated_at")
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+    // サマリー統計
+    if (req.method === "GET" && req.url === "/api/admin/stats") {
+      const [leadsRes, regRes, inqRes] = await Promise.all([
+        supabase.from("leads").select("*", { count: "exact", head: true }),
+        supabase.from("detail_registrations").select("*", { count: "exact", head: true }).eq("status", "pending"),
+        supabase.from("consultation_inquiries").select("*", { count: "exact", head: true }).eq("status", "new")
+      ]);
+      const today = new Date().toISOString().slice(0, 10);
+      const { count: todayCount } = await supabase
+        .from("leads").select("*", { count: "exact", head: true }).gte("created_at", today);
 
-    if (status) {
-      query = query.eq("status", status);
-    }
-
-    const { data: patents, error } = await query;
-
-    if (error) {
-      console.error("[admin/patents] Supabase error:", error.message);
-      respondJson(req, res, 500, { requestId, message: "database error" });
-      return;
-    }
-
-    respondJson(req, res, 200, { requestId, patents, count: patents.length, offset, limit });
-    return;
-  }
-
-  // 管理API: 侵害調査リストエクスポート
-  if (req.method === "POST" && req.url === "/api/admin/export-patents") {
-    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
-      metrics.errors4xx += 1;
-      respondJson(req, res, 403, { requestId, message: "forbidden" });
-      return;
-    }
-
-    let body;
-    try {
-      body = await readJsonBody(req, BODY_LIMIT_BYTES * 2);
-    } catch (error) {
-      respondJson(req, res, 400, { requestId, message: "invalid request body" });
-      return;
-    }
-
-    const format = String(body.format || "json").toLowerCase();
-    const limit = Math.min(Number(body.limit || 100), 500);
-    const status = body.status || "登録";
-
-    const patents = await exportPatentsForAnalysis({ limit, status });
-    if (patents === null) {
-      respondJson(req, res, 503, { requestId, message: "Supabase not available or query failed" });
-      return;
-    }
-
-    if (format === "csv") {
-      const headers = ["id", "patent_number", "normalized_number", "title", "category", "applicant", "ipc_codes"];
-      const rows = patents.map((p) =>
-        headers.map((h) => {
-          const v = p[h];
-          if (v === null || v === undefined) return "";
-          const s = Array.isArray(v) ? v.join("|") : String(v);
-          return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
-        }).join(",")
-      );
-      const csv = [headers.join(","), ...rows].join("\n");
-
-      res.writeHead(200, {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="patents-export-${new Date().toISOString().slice(0, 10)}.csv"`
+      respondJson(req, res, 200, {
+        requestId,
+        totalLeads: leadsRes.count || 0,
+        newToday: todayCount || 0,
+        pendingRegistrations: regRes.count || 0,
+        newInquiries: inqRes.count || 0
       });
-      res.end(csv);
       return;
     }
 
-    respondJson(req, res, 200, { requestId, patents, count: patents.length });
+    // リード一覧
+    if (req.method === "GET" && req.url?.startsWith("/api/admin/leads") && !req.url.includes("/api/admin/leads/")) {
+      const status = adminUrl.searchParams.get("status") || null;
+      const search = adminUrl.searchParams.get("search") || null;
+      const limit = Math.min(Number(adminUrl.searchParams.get("limit") || 50), 200);
+      const offset = Number(adminUrl.searchParams.get("offset") || 0);
+
+      let query = supabase
+        .from("leads")
+        .select("id, name, company_name, email, status, source, admin_notes, created_at, updated_at, patents(patent_number, title), detail_registrations(id, type, status)")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (status) query = query.eq("status", status);
+      if (search) query = query.or(`name.ilike.%${search}%,company_name.ilike.%${search}%,email.ilike.%${search}%`);
+
+      const { data: leads, error } = await query;
+      if (error) { respondJson(req, res, 500, { requestId, message: "database error" }); return; }
+      respondJson(req, res, 200, { requestId, leads, count: leads.length, offset, limit });
+      return;
+    }
+
+    // リード詳細 / リード更新
+    const leadsDetailMatch = req.url?.match(/^\/api\/admin\/leads\/([0-9a-f-]+)/);
+    if (leadsDetailMatch) {
+      const leadId = leadsDetailMatch[1];
+
+      if (req.method === "GET") {
+        const [leadRes, patentsRes, regsRes] = await Promise.all([
+          supabase.from("leads").select("*").eq("id", leadId).single(),
+          supabase.from("patents").select("*").eq("lead_id", leadId).order("created_at", { ascending: false }),
+          supabase.from("detail_registrations").select("*").eq("lead_id", leadId).order("created_at", { ascending: false })
+        ]);
+        if (leadRes.error) { respondJson(req, res, 404, { requestId, message: "lead not found" }); return; }
+        respondJson(req, res, 200, { requestId, lead: leadRes.data, patents: patentsRes.data || [], registrations: regsRes.data || [] });
+        return;
+      }
+
+      if (req.method === "PATCH") {
+        let body;
+        try { body = await readJsonBody(req, BODY_LIMIT_BYTES * 2); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
+        const updates = {};
+        if (body.status) updates.status = body.status;
+        if (body.admin_notes !== undefined) updates.admin_notes = body.admin_notes;
+        if (Object.keys(updates).length === 0) { respondJson(req, res, 400, { requestId, message: "no fields to update" }); return; }
+        const { error } = await supabase.from("leads").update(updates).eq("id", leadId);
+        if (error) { respondJson(req, res, 500, { requestId, message: "update failed" }); return; }
+        respondJson(req, res, 200, { requestId, message: "updated" });
+        return;
+      }
+    }
+
+    // 詳細登録一覧
+    if (req.method === "GET" && req.url?.startsWith("/api/admin/detail-registrations") && !req.url.includes("/detail-registrations/")) {
+      const status = adminUrl.searchParams.get("status") || null;
+      const limit = Math.min(Number(adminUrl.searchParams.get("limit") || 50), 200);
+      const offset = Number(adminUrl.searchParams.get("offset") || 0);
+      let query = supabase
+        .from("detail_registrations")
+        .select("id, lead_id, patent_id, type, department, contact_name, phone, desired_price, support_method, status, admin_notes, created_at, updated_at")
+        .order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+      if (status) query = query.eq("status", status);
+      const { data, error } = await query;
+      if (error) { respondJson(req, res, 500, { requestId, message: "database error" }); return; }
+      respondJson(req, res, 200, { requestId, registrations: data, count: data.length, offset, limit });
+      return;
+    }
+
+    // 詳細登録ステータス更新
+    const regMatch = req.url?.match(/^\/api\/admin\/detail-registrations\/([0-9a-f-]+)/);
+    if (req.method === "PATCH" && regMatch) {
+      let body;
+      try { body = await readJsonBody(req, BODY_LIMIT_BYTES * 2); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
+      const updates = {};
+      if (body.status) updates.status = body.status;
+      if (body.admin_notes !== undefined) updates.admin_notes = body.admin_notes;
+      const { error } = await supabase.from("detail_registrations").update(updates).eq("id", regMatch[1]);
+      if (error) { respondJson(req, res, 500, { requestId, message: "update failed" }); return; }
+      respondJson(req, res, 200, { requestId, message: "updated" });
+      return;
+    }
+
+    // 問い合わせ一覧
+    if (req.method === "GET" && req.url?.startsWith("/api/admin/consultation-inquiries") && !req.url.includes("/consultation-inquiries/")) {
+      const status = adminUrl.searchParams.get("status") || null;
+      const limit = Math.min(Number(adminUrl.searchParams.get("limit") || 50), 200);
+      const offset = Number(adminUrl.searchParams.get("offset") || 0);
+      let query = supabase
+        .from("consultation_inquiries")
+        .select("id, catalog_entry_id, name, company_name, email, phone, message, inquiry_type, status, admin_notes, created_at")
+        .order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+      if (status) query = query.eq("status", status);
+      const { data, error } = await query;
+      if (error) { respondJson(req, res, 500, { requestId, message: "database error" }); return; }
+      respondJson(req, res, 200, { requestId, inquiries: data, count: data.length, offset, limit });
+      return;
+    }
+
+    // 問い合わせステータス更新
+    const inqMatch = req.url?.match(/^\/api\/admin\/consultation-inquiries\/([0-9a-f-]+)/);
+    if (req.method === "PATCH" && inqMatch) {
+      let body;
+      try { body = await readJsonBody(req, BODY_LIMIT_BYTES * 2); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
+      const updates = {};
+      if (body.status) updates.status = body.status;
+      if (body.admin_notes !== undefined) updates.admin_notes = body.admin_notes;
+      const { error } = await supabase.from("consultation_inquiries").update(updates).eq("id", inqMatch[1]);
+      if (error) { respondJson(req, res, 500, { requestId, message: "update failed" }); return; }
+      respondJson(req, res, 200, { requestId, message: "updated" });
+      return;
+    }
+
+    // 特許リスト取得（既存）
+    if (req.method === "GET" && req.url?.startsWith("/api/admin/patents")) {
+      const status = adminUrl.searchParams.get("status") || null;
+      const limit = Math.min(Number(adminUrl.searchParams.get("limit") || 100), 500);
+      const offset = Number(adminUrl.searchParams.get("offset") || 0);
+
+      let query = supabase
+        .from("patents")
+        .select("id, patent_number, normalized_number, title, category, applicant, ipc_codes, status, diagnosis_result, created_at, updated_at")
+        .order("created_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (status) query = query.eq("status", status);
+
+      const { data: patents, error } = await query;
+      if (error) {
+        console.error("[admin/patents] Supabase error:", error.message);
+        respondJson(req, res, 500, { requestId, message: "database error" });
+        return;
+      }
+      respondJson(req, res, 200, { requestId, patents, count: patents.length, offset, limit });
+      return;
+    }
+
+    // 侵害調査リストエクスポート（既存）
+    if (req.method === "POST" && req.url === "/api/admin/export-patents") {
+      let body;
+      try { body = await readJsonBody(req, BODY_LIMIT_BYTES * 2); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
+
+      const format = String(body.format || "json").toLowerCase();
+      const limit = Math.min(Number(body.limit || 100), 500);
+      const status = body.status || "登録";
+
+      const patents = await exportPatentsForAnalysis({ limit, status });
+      if (patents === null) { respondJson(req, res, 503, { requestId, message: "Supabase not available or query failed" }); return; }
+
+      if (format === "csv") {
+        const headers = ["id", "patent_number", "normalized_number", "title", "category", "applicant", "ipc_codes"];
+        const rows = patents.map((p) =>
+          headers.map((h) => {
+            const v = p[h];
+            if (v === null || v === undefined) return "";
+            const s = Array.isArray(v) ? v.join("|") : String(v);
+            return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+          }).join(",")
+        );
+        const csv = [headers.join(","), ...rows].join("\n");
+        res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="patents-export-${new Date().toISOString().slice(0, 10)}.csv"` });
+        res.end(csv);
+        return;
+      }
+      respondJson(req, res, 200, { requestId, patents, count: patents.length });
+      return;
+    }
+
+    // phase2分析結果同期（既存）
+    if (req.method === "POST" && req.url === "/api/admin/sync-analysis") {
+      let body;
+      try { body = await readJsonBody(req, BODY_LIMIT_BYTES * 4); } catch { respondJson(req, res, 400, { requestId, message: "invalid request body" }); return; }
+
+      const patentId = String(body.patent_id || "").trim();
+      if (!patentId) { respondJson(req, res, 400, { requestId, message: "patent_id is required" }); return; }
+      if (!body.result || typeof body.result !== "object") { respondJson(req, res, 400, { requestId, message: "result must be an object" }); return; }
+
+      const saved = await saveAnalysisResult(patentId, body.result);
+      if (saved === null) { respondJson(req, res, 503, { requestId, message: "Supabase not available" }); return; }
+      if (!saved) { respondJson(req, res, 500, { requestId, message: "failed to save analysis result" }); return; }
+
+      logRequest({ requestId, type: "admin_sync_analysis", patentId });
+      respondJson(req, res, 200, { requestId, message: "analysis result saved", patentId });
+      return;
+    }
+
+    // 未知の管理APIパス
+    respondJson(req, res, 404, { requestId, message: "admin endpoint not found" });
     return;
-  }
-
-  // 管理API: phase2分析結果同期
-  if (req.method === "POST" && req.url === "/api/admin/sync-analysis") {
-    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
-      metrics.errors4xx += 1;
-      respondJson(req, res, 403, { requestId, message: "forbidden" });
-      return;
-    }
-
-    let body;
-    try {
-      body = await readJsonBody(req, BODY_LIMIT_BYTES * 4);
-    } catch (error) {
-      respondJson(req, res, 400, { requestId, message: "invalid request body" });
-      return;
-    }
-
-    const patentId = String(body.patent_id || "").trim();
-    if (!patentId) {
-      respondJson(req, res, 400, { requestId, message: "patent_id is required" });
-      return;
-    }
-
-    if (!body.result || typeof body.result !== "object") {
-      respondJson(req, res, 400, { requestId, message: "result must be an object" });
-      return;
-    }
-
-    const saved = await saveAnalysisResult(patentId, body.result);
-    if (saved === null) {
-      respondJson(req, res, 503, { requestId, message: "Supabase not available" });
-      return;
-    }
-    if (!saved) {
-      respondJson(req, res, 500, { requestId, message: "failed to save analysis result" });
-      return;
-    }
-
-    logRequest({ requestId, type: "admin_sync_analysis", patentId });
-    respondJson(req, res, 200, { requestId, message: "analysis result saved", patentId });
+   } catch (adminErr) {
+    console.error("[admin] uncaught error:", adminErr);
+    respondJson(req, res, 500, { requestId, message: "admin error", detail: String(adminErr?.message || adminErr) });
     return;
+   }
   }
 
   // V2パイプラインで簡易評価（構成要件充足判定）を実行
@@ -896,7 +998,8 @@ async function handler(req, res) {
 
   // デバッグ: OpenAI API + JPO API接続テスト
   if (req.method === "GET" && req.url === "/api/debug-connectivity") {
-    if (req.headers["x-metrics-key"] !== METRICS_API_KEY) {
+    const debugAuth = await verifyAdminAuth(req);
+    if (!debugAuth.ok) {
       respondJson(req, res, 403, { requestId, message: "forbidden" });
       return;
     }
@@ -1388,6 +1491,12 @@ async function handler(req, res) {
   }
 
   sendFile(res, filePath);
+  } catch (err) {
+    console.error("[handler] uncaught:", err);
+    if (!res.headersSent) {
+      respondJson(req, res, 500, { message: "internal server error" });
+    }
+  }
 }
 
 // ローカル開発: listen / Vercel: export

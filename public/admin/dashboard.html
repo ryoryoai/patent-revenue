@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="supabase-url" content="https://sukemwnslhkehatwvdqd.supabase.co">
+  <meta name="supabase-anon-key" content="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1a2Vtd25zbGhrZWhhdHd2ZHFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0NDM1MjUsImV4cCI6MjA5MDAxOTUyNX0.-AxVOi1ZL7UouogJMt9aoEwyWu5cxMm101MyNn1oE_w">
+  <title>Dashboard - Patent Value Checker Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <header class="admin-header">
+    <h1>Patent Value Checker Admin</h1>
+    <div class="user-info">
+      <span id="userEmail"></span>
+      <button class="btn-logout" onclick="logout()">ログアウト</button>
+    </div>
+  </header>
+
+  <div class="admin-container">
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card"><div class="label">リード合計</div><div class="value" id="statTotal">-</div></div>
+      <div class="stat-card"><div class="label">本日の新規</div><div class="value" id="statToday">-</div></div>
+      <div class="stat-card"><div class="label">未対応の登録</div><div class="value" id="statPending">-</div></div>
+      <div class="stat-card"><div class="label">新規問い合わせ</div><div class="value" id="statInquiries">-</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="leads">リード</button>
+      <button class="tab-btn" data-tab="registrations">詳細登録</button>
+      <button class="tab-btn" data-tab="inquiries">問い合わせ</button>
+    </div>
+
+    <!-- Leads tab -->
+    <div id="tab-leads" class="tab-content">
+      <div class="filters">
+        <select id="leadStatusFilter">
+          <option value="">全ステータス</option>
+          <option value="created">作成済み</option>
+          <option value="submitted">診断済み</option>
+          <option value="emailed">メール送信済み</option>
+          <option value="detail_started">詳細レポート開始</option>
+          <option value="detail_submitted">詳細レポート送信済み</option>
+          <option value="contacted">連絡済み</option>
+          <option value="converted">成約</option>
+          <option value="closed">クローズ</option>
+        </select>
+        <input type="text" id="leadSearch" placeholder="名前・企業・メールで検索">
+        <button class="btn btn-export btn-sm" onclick="exportCSV()">CSV出力</button>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr><th>日時</th><th>氏名</th><th>企業</th><th>メール</th><th>特許番号</th><th>本登録</th><th>ステータス</th></tr>
+          </thead>
+          <tbody id="leadsBody"></tbody>
+        </table>
+      </div>
+      <div class="load-more"><button class="btn btn-sm" id="loadMoreLeads" style="display:none" onclick="loadMoreLeads()">もっと読み込む</button></div>
+    </div>
+
+    <!-- Registrations tab -->
+    <div id="tab-registrations" class="tab-content" style="display:none">
+      <div class="filters">
+        <select id="regStatusFilter">
+          <option value="">全ステータス</option>
+          <option value="pending">未対応</option>
+          <option value="reviewed">確認済み</option>
+          <option value="contacted">連絡済み</option>
+          <option value="converted">成約</option>
+          <option value="closed">クローズ</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr><th>日時</th><th>種別</th><th>担当者</th><th>希望価格</th><th>サポート</th><th>ステータス</th></tr>
+          </thead>
+          <tbody id="regsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Inquiries tab -->
+    <div id="tab-inquiries" class="tab-content" style="display:none">
+      <div class="filters">
+        <select id="inqStatusFilter">
+          <option value="">全ステータス</option>
+          <option value="new">新規</option>
+          <option value="replied">返信済み</option>
+          <option value="closed">クローズ</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr><th>日時</th><th>氏名</th><th>企業</th><th>メール</th><th>種別</th><th>ステータス</th></tr>
+          </thead>
+          <tbody id="inqsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="/admin/vendor/supabase.min.js"></script>
+  <script src="/admin/admin.js"></script>
+  <script src="/admin/dashboard.js"></script>
+</body>
+</html>
