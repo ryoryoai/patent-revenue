@@ -1195,6 +1195,7 @@ async function handler(req, res) {
           if (reg?.id) {
             await updateDetailRegistrationStatus(reg.id, "reviewed");
           }
+          await updateLeadStatus(lead.id, "detail_submitted");
           console.log(`[request-detailed-report] DB save success: leadId=${lead.id}, regId=${reg?.id}`);
         } else {
           console.error(`[request-detailed-report] failed to find or create lead for ${email}`);
