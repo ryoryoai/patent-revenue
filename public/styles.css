@@ -11,6 +11,8 @@
   --primary-hover: #3d54a3;
   --accent: #1176d4;
   --accent-soft: rgba(17, 118, 212, 0.08);
+  --cta: #1a8c5e;
+  --cta-hover: #1fa06b;
   --warn: #a35a00;
   --warn-bg: #fff8ef;
   --danger: #b02323;
@@ -379,6 +381,19 @@ h3 {
   background: var(--primary-hover);
   box-shadow: var(--shadow-md);
   filter: brightness(1.15);
+}
+
+.btn-cta {
+  color: #fff;
+  background: var(--cta);
+  box-shadow: var(--shadow-sm);
+  font-size: 16px;
+}
+
+.btn-cta:hover {
+  background: var(--cta-hover);
+  box-shadow: var(--shadow-md);
+  filter: brightness(1.1);
 }
 
 /* --- Loading Spinner --- */
