@@ -744,6 +744,67 @@ async function handler(req, res) {
     return;
   }
 
+  // 週次サマリーレポート（x-metrics-key認証）
+  if (req.method === "GET" && req.url === "/api/weekly-report") {
+    const key = (req.headers["x-metrics-key"] || "").trim();
+    if (!key || key !== METRICS_API_KEY) {
+      respondJson(req, res, 403, { requestId, message: "forbidden" });
+      return;
+    }
+    const supabase = getSupabase();
+    if (!supabase) { respondJson(req, res, 503, { requestId, message: "Supabase not configured" }); return; }
+
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const prevWeekAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      totalLeads, weekLeads, prevWeekLeads,
+      totalPatents, weekPatents,
+      weekRegs, weekInquiries,
+      statusBreakdown, topPatents
+    ] = await Promise.all([
+      supabase.from("leads").select("*", { count: "exact", head: true }),
+      supabase.from("leads").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("leads").select("*", { count: "exact", head: true }).gte("created_at", prevWeekAgo).lt("created_at", weekAgo),
+      supabase.from("patents").select("*", { count: "exact", head: true }),
+      supabase.from("patents").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("detail_registrations").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("consultation_inquiries").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("leads").select("status").gte("created_at", weekAgo),
+      supabase.from("patents").select("patent_number, title, category, diagnosis_result").gte("created_at", weekAgo).not("diagnosis_result", "is", null).order("created_at", { ascending: false }).limit(10)
+    ]);
+
+    const statusCounts = {};
+    for (const row of (statusBreakdown.data || [])) {
+      statusCounts[row.status] = (statusCounts[row.status] || 0) + 1;
+    }
+
+    respondJson(req, res, 200, {
+      requestId,
+      period: { from: weekAgo, to: now.toISOString() },
+      summary: {
+        totalLeads: totalLeads.count || 0,
+        totalPatents: totalPatents.count || 0,
+        weekLeads: weekLeads.count || 0,
+        prevWeekLeads: prevWeekLeads.count || 0,
+        weekGrowth: prevWeekLeads.count ? Math.round(((weekLeads.count - prevWeekLeads.count) / prevWeekLeads.count) * 100) : null,
+        weekPatents: weekPatents.count || 0,
+        weekRegistrations: weekRegs.count || 0,
+        weekInquiries: weekInquiries.count || 0,
+      },
+      statusBreakdown: statusCounts,
+      topPatents: (topPatents.data || []).map(p => ({
+        number: p.patent_number,
+        title: p.title,
+        category: p.category,
+        rank: p.diagnosis_result?.rank,
+        score: p.diagnosis_result?.scores?.total
+      }))
+    });
+    return;
+  }
+
   // ─── 管理API 共通認証 ───
   if (req.url?.startsWith("/api/admin/")) {
    try {
