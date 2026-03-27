@@ -1186,6 +1186,26 @@ async function handler(req, res) {
         }
         if (lead) {
           await updateLeadStatus(lead.id, "detail_started");
+          // 調査結果を含む特許データを保存
+          await savePatent({
+            leadId: lead.id,
+            patentNumber: patentId,
+            normalizedNumber: patentId,
+            title: result.patent?.title || "",
+            category: result.patent?.category || "",
+            status: result.patent?.status || "",
+            filingDate: result.patent?.filingDate || null,
+            registrationDate: result.patent?.registrationDate || null,
+            expireDate: result.patent?.expireDate || null,
+            applicant: result.patent?.applicant || null,
+            applicantType: result.patent?.applicantType || null,
+            ipcCodes: result.patent?.ipcCodes || null,
+            metrics: result.patent?.metrics || null,
+            jpoRaw: result.patent?._jpoRaw || null,
+            llmSummary: result.structured || null,
+            diagnosisResult: { scores: result.scores, rank: result.rank, valueRange: result.valueRange, royaltyRange: result.royaltyRange },
+            source: result.source || null
+          });
           const reg = await saveDetailedReportRequest({
             leadId: lead.id,
             patentId,
@@ -1531,7 +1551,14 @@ async function handler(req, res) {
           category: diagnosis.patent?.category || "",
           status: diagnosis.patent?.status || "",
           filingDate: diagnosis.patent?.filingDate || null,
-          registrationDate: diagnosis.patent?.registrationDate || null
+          registrationDate: diagnosis.patent?.registrationDate || null,
+          expireDate: diagnosis.patent?.expireDate || null,
+          applicant: diagnosis.patent?.applicant || null,
+          applicantType: diagnosis.patent?.applicantType || null,
+          ipcCodes: diagnosis.patent?.ipcCodes || null,
+          metrics: diagnosis.patent?.metrics || null,
+          diagnosisResult: diagnosis.scores ? { scores: diagnosis.scores, rank: diagnosis.rank } : null,
+          source: diagnosis.meta?.mode || null
         }).then(() => {
           if (!diagnosis.invalid) {
             updateLeadStatus(leadId, "diagnosed");
