@@ -17,6 +17,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   color: var(--ink);
@@ -24,6 +28,8 @@ body {
   font-family: "Noto Sans JP", -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Header */
@@ -47,9 +53,17 @@ body {
   font-size: 13px;
 }
 .admin-header .btn-logout:hover { background: rgba(255,255,255,0.25); }
+@media (max-width: 768px) {
+  .admin-header { padding: 10px 12px; }
+  .admin-header h1 { font-size: 14px; }
+  .admin-header .user-info { font-size: 11px; gap: 8px; }
+}
 
 /* Layout */
-.admin-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+.admin-container { max-width: 1200px; margin: 0 auto; padding: 20px; overflow-x: hidden; }
+@media (max-width: 768px) {
+  .admin-container { padding: 12px; }
+}
 
 /* Stats */
 .stats-row {
@@ -89,8 +103,10 @@ body {
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
 }
-.admin-table { width: 100%; border-collapse: collapse; }
+.admin-table { width: 100%; border-collapse: collapse; min-width: 640px; }
 .admin-table th {
   text-align: left;
   padding: 10px 14px;
@@ -148,6 +164,11 @@ body {
   background: var(--surface);
 }
 .filters input { min-width: 200px; }
+@media (max-width: 768px) {
+  .filters { flex-direction: column; gap: 8px; }
+  .filters input { min-width: 0; width: 100%; }
+  .filters select { width: 100%; }
+}
 
 /* Buttons */
 .btn {
