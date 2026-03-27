@@ -633,11 +633,14 @@ diagnosisForm.addEventListener("submit", async (event) => {
   trackEvent("diagnosis_start", { query_type: "number" });
 
   try {
+    const _diagStart = Date.now();
     const diagnosis = await fetchPatentInfo(input.query, captchaToken, {
       name: leadName,
       company: leadCompany,
       email: leadEmail
     });
+    const _elapsed = Date.now() - _diagStart;
+    if (_elapsed < 2000) await new Promise(r => setTimeout(r, 2000 - _elapsed));
     captchaToken = "";
     if (turnstileWidgetId !== null && window.turnstile) {
       window.turnstile.reset(turnstileWidgetId);
