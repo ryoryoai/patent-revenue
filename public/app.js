@@ -817,10 +817,10 @@ if (regForm) {
     const _reportSteps = [
       { at: 0, text: "特許データを照会中…" },
       { at: 2500, text: "AIが詳細分析を実行中…" },
-      { at: 5000, text: "評価レポートを生成中…" },
-      { at: 8000, text: "PDFを作成中…" },
+      { at: 5000, text: "評価レポートを作成中…" },
+      { at: 8000, text: "PDFレポートを生成中…" },
       { at: 15000, text: "もう少しで完了します…" },
-      { at: 30000, text: "大規模な分析を実行中…" },
+      { at: 30000, text: "最終チェックを実行中…" },
     ];
     let _rStepIdx = 0;
     const _rStart = Date.now();
