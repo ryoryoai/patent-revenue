@@ -64,6 +64,7 @@ async function loadLeads() {
         <td>${escapeHtml(lead.name)}</td>
         <td>${escapeHtml(lead.company_name)}</td>
         <td>${escapeHtml(lead.email)}</td>
+        <td>${escapeHtml(lead.query_input || "-")}</td>
         <td>${escapeHtml(patentNums || "-")}</td>
         <td>${regs.length > 0 ? `<span class="${regClass}">${escapeHtml(regLabel)}</span>` : "-"}</td>
         <td>${badgeHtml(lead.status)}</td>

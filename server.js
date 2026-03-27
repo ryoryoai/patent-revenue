@@ -745,7 +745,7 @@ async function handler(req, res) {
 
       let query = supabase
         .from("leads")
-        .select("id, name, company_name, email, status, source, admin_notes, created_at, updated_at, patents(patent_number, title), detail_registrations(id, type, status)")
+        .select("id, name, company_name, email, status, source, query_input, admin_notes, created_at, updated_at, patents(patent_number, title), detail_registrations(id, type, status)")
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
       if (status) query = query.eq("status", status);
@@ -1435,7 +1435,8 @@ async function handler(req, res) {
         source,
         referrer: String(ts.referrer || "").slice(0, 500) || null,
         utmData: ts.utm || null,
-        landingPage: String(ts.landingPage || "").slice(0, 200) || null
+        landingPage: String(ts.landingPage || "").slice(0, 200) || null,
+        queryInput: String(body.query || "").slice(0, 200) || null
       });
       leadId = leadRecord?.id || null;
       logRequest({
