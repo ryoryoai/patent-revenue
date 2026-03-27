@@ -1391,11 +1391,17 @@ async function handler(req, res) {
 
     let leadId = null;
     if (leadEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(leadEmail)) {
+      const ts = body.trafficSource || {};
+      const utmSource = String(ts.utm?.utm_source || "").slice(0, 100) || null;
+      const source = utmSource || "patent-value-check";
       const leadRecord = await saveLead({
         name: leadName,
         companyName: leadCompany,
         email: leadEmail,
-        source: "patent-value-check"
+        source,
+        referrer: String(ts.referrer || "").slice(0, 500) || null,
+        utmData: ts.utm || null,
+        landingPage: String(ts.landingPage || "").slice(0, 200) || null
       });
       leadId = leadRecord?.id || null;
       logRequest({

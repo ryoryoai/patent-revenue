@@ -295,13 +295,30 @@ async function fetchPatentInfoFallback(query) {
   return response;
 }
 
+function getTrafficSource() {
+  const params = new URLSearchParams(window.location.search);
+  const utm = {};
+  for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
+    const val = params.get(key);
+    if (val) utm[key] = val;
+  }
+  return {
+    utm: Object.keys(utm).length > 0 ? utm : undefined,
+    referrer: document.referrer || undefined,
+    landingPage: window.location.pathname
+  };
+}
+
+const _trafficSource = getTrafficSource();
+
 async function fetchPatentInfo(query, challengeToken = "", leadFields = {}) {
   const body = JSON.stringify({
     query,
     captchaToken: challengeToken || undefined,
     name: leadFields.name || undefined,
     company: leadFields.company || undefined,
-    email: leadFields.email || undefined
+    email: leadFields.email || undefined,
+    trafficSource: _trafficSource
   });
   let response;
 
