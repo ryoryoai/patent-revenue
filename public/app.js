@@ -632,9 +632,9 @@ diagnosisForm.addEventListener("submit", async (event) => {
   // Labor Illusion: 段階的ステータス表示で信頼性向上（Harvard Business School, Buell & Norton 2011）
   const _MIN_DISPLAY_MS = 4000;
   const _statusSteps = [
-    { at: 0, text: "特許データベースを照会しています…" },
-    { at: 1500, text: "JPO公式データを取得中…" },
-    { at: 3000, text: "AIが特許価値を分析しています…" },
+    { at: 0, text: "データ照会中…" },
+    { at: 1500, text: "公式データ取得中…" },
+    { at: 3000, text: "AI分析中…" },
   ];
   let _stepIdx = 0;
   submitButton.textContent = _statusSteps[0].text;

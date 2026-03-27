@@ -387,6 +387,7 @@ h3 {
   position: relative;
   pointer-events: none;
   opacity: 0.85;
+  min-width: 160px;
 }
 
 .btn-loading::before {
