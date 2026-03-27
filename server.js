@@ -563,63 +563,39 @@ async function getDiagnosis(query, requestId) {
 
   metrics.cacheMiss += 1;
 
-  // Google Patents による特許存在確認（必須ゲート）
-  {
-    let gpStatus;
-    try {
-      gpStatus = await fetchPatentStatus(query);
-    } catch (error) {
-      console.warn(`[diagnose] Google Patents status check failed: ${error.message}`);
-      throw new Error("patent_lookup_failed");
-    }
-
-    if (!gpStatus.exists) {
-      console.log(`[diagnose] patent ${query} not found on Google Patents`);
-      const notFoundPatent = {
-        id: query,
-        title: `特許第${query}号`,
-        applicant: "",
-        applicantType: "",
-        registrationDate: "",
-        filingDate: "",
-        category: "",
-        status: "不明",
-        officialUrl: `https://www.j-platpat.inpit.go.jp/`,
-        metrics: {}
-      };
-      resultCache.set(cacheKey, { patent: notFoundPatent, invalid: true, expiresAt: Date.now() + CACHE_TTL_MS });
-      return {
-        resultId: `nf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        patent: notFoundPatent,
-        invalid: true,
-        notFound: true,
-        meta: { mode: "api", cacheHit: false, requestId }
-      };
-    }
-
-    if (!gpStatus.active && gpStatus.statusText) {
-      console.log(`[diagnose] patent ${query} is invalid (${gpStatus.statusText}), skipping further lookup`);
-      const invalidPatent = {
-        id: query,
-        title: `特許第${query}号`,
-        applicant: "",
-        applicantType: "",
-        registrationDate: "",
-        filingDate: "",
-        category: "",
-        status: gpStatus.statusText,
-        officialUrl: `https://www.j-platpat.inpit.go.jp/`,
-        metrics: {}
-      };
-      resultCache.set(cacheKey, { patent: invalidPatent, invalid: true, expiresAt: Date.now() + CACHE_TTL_MS });
-      return {
-        resultId: `inv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        patent: invalidPatent,
-        invalid: true,
-        meta: { mode: "api", cacheHit: false, requestId }
-      };
-    }
+  // Google Patents による事前ステータスチェック（ヒント、必須ゲートではない）
+  // 見つからない場合やエラー時はJPO APIにフォールバック
+  let gpStatusHint = null;
+  try {
+    gpStatusHint = await fetchPatentStatus(query);
+  } catch (error) {
+    console.warn(`[diagnose] Google Patents status check failed: ${error.message}, proceeding to JPO API`);
   }
+
+  // Google Patentsで明確に無効ステータスが判明した場合のみ早期リターン
+  if (gpStatusHint && gpStatusHint.exists && !gpStatusHint.active && gpStatusHint.statusText) {
+    console.log(`[diagnose] patent ${query} is invalid (${gpStatusHint.statusText}), skipping further lookup`);
+    const invalidPatent = {
+      id: query,
+      title: `特許第${query}号`,
+      applicant: "",
+      applicantType: "",
+      registrationDate: "",
+      filingDate: "",
+      category: "",
+      status: gpStatusHint.statusText,
+      officialUrl: `https://www.j-platpat.inpit.go.jp/`,
+      metrics: {}
+    };
+    resultCache.set(cacheKey, { patent: invalidPatent, invalid: true, expiresAt: Date.now() + CACHE_TTL_MS });
+    return {
+      resultId: `inv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      patent: invalidPatent,
+      invalid: true,
+      meta: { mode: "api", cacheHit: false, requestId }
+    };
+  }
+  // Google Patentsで見つからない / エラー → JPO APIで正式に確認するため続行
 
   let runner = inFlight.get(cacheKey);
   if (!runner) {
