@@ -812,13 +812,30 @@ if (regForm) {
     const statusEl = document.getElementById("reg-status");
     submitBtn.disabled = true;
     submitBtn.classList.add("btn-loading");
-    submitBtn.textContent = "レポートを生成しています…";
+
+    // Labor Illusion: 段階的ステータスで信頼性向上
+    const _reportSteps = [
+      { at: 0, text: "特許データを照会中…" },
+      { at: 2000, text: "AIが詳細分析を実行中…" },
+      { at: 5000, text: "評価レポートを生成中…" },
+      { at: 10000, text: "PDFを作成中…" },
+      { at: 20000, text: "もうしばらくお待ちください…" },
+    ];
+    let _rStepIdx = 0;
+    const _rStart = Date.now();
+    submitBtn.textContent = _reportSteps[0].text;
+    const _rTimer = setInterval(() => {
+      const elapsed = Date.now() - _rStart;
+      while (_rStepIdx < _reportSteps.length - 1 && elapsed >= _reportSteps[_rStepIdx + 1].at) _rStepIdx++;
+      submitBtn.textContent = _reportSteps[_rStepIdx].text;
+    }, 300);
 
     const email = document.getElementById("lead-email")?.value?.trim() || "";
     const name = document.getElementById("lead-name")?.value?.trim() || "";
     const patentId = document.getElementById("query")?.value?.trim() || "";
 
     try {
+      const _rElapsedAtFetch = Date.now();
       const res = await fetch("/api/request-detailed-report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -835,6 +852,8 @@ if (regForm) {
       });
 
       const data = await res.json();
+      const _rTotalElapsed = Date.now() - _rStart;
+      if (_rTotalElapsed < 4000) await new Promise(r => setTimeout(r, 4000 - _rTotalElapsed));
 
       if (res.ok) {
         statusEl.className = "reg-status success";
@@ -854,6 +873,7 @@ if (regForm) {
       statusEl.textContent = "通信エラーが発生しました。";
       statusEl.classList.remove("hidden");
     } finally {
+      clearInterval(_rTimer);
       submitBtn.classList.remove("btn-loading");
       submitBtn.disabled = false;
       submitBtn.textContent = "詳細レポートを申請する";
