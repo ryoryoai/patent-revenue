@@ -182,13 +182,7 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function normalizePatentNumber(input) {
-  return String(input || "")
-    .replace(/特許第/g, "")
-    .replace(/号/g, "")
-    .replace(/[\s-]/g, "")
-    .replace(/[^0-9]/g, "");
-}
+
 
 function percentile(value, min, max) {
   if (max <= min) return 50;
@@ -266,8 +260,7 @@ function pseudoPatentFromQuery(query, number) {
 }
 
 async function fetchPatentInfoFallback(query) {
-  const patentNumber = normalizePatentNumber(query);
-  const cacheKey = `pvc_cache_${patentNumber || query}`;
+  const cacheKey = `pvc_cache_${query}`;
   const cached = localStorage.getItem(cacheKey);
 
   if (cached) {

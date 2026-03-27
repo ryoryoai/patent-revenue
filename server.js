@@ -563,15 +563,15 @@ async function getDiagnosis(query, requestId) {
 
   metrics.cacheMiss += 1;
 
-  // Google Patents による軽量ステータスチェック (特許番号が6桁以上の場合のみ)
-  if (normalized && normalized.length >= 6) {
+  // Google Patents による軽量ステータスチェック
+  {
     try {
-      const gpStatus = await fetchPatentStatus(normalized);
+      const gpStatus = await fetchPatentStatus(query);
       if (gpStatus.exists && !gpStatus.active && gpStatus.statusText) {
-        console.log(`[diagnose] patent ${normalized} is invalid (${gpStatus.statusText}), skipping LLM call`);
+        console.log(`[diagnose] patent ${query} is invalid (${gpStatus.statusText}), skipping LLM call`);
         const invalidPatent = {
-          id: normalized,
-          title: `特許第${normalized}号`,
+          id: query,
+          title: `特許第${query}号`,
           applicant: "",
           applicantType: "",
           registrationDate: "",
