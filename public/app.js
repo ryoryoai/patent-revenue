@@ -610,6 +610,13 @@ diagnosisForm.addEventListener("submit", async (event) => {
 
     // 無効特許の場合はスコア計算せずメッセージ表示
     if (diagnosis.invalid) {
+      if (diagnosis.notFound) {
+        showSystemMessage("この特許番号は見つかりませんでした。番号をご確認のうえ再度お試しください。", "warn");
+        submitButton.classList.remove("btn-loading");
+        submitButton.textContent = originalText;
+        submitButton.disabled = false;
+        return;
+      }
       const statusMessages = {
         "消滅": "この特許は権利が消滅しています。有効な特許のみ診断できます。",
         "拒絶": "この特許出願は拒絶されています。有効な特許のみ診断できます。",

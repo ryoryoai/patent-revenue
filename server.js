@@ -563,44 +563,61 @@ async function getDiagnosis(query, requestId) {
 
   metrics.cacheMiss += 1;
 
-  // Google Patents による軽量ステータスチェック
+  // Google Patents による特許存在確認（必須ゲート）
   {
+    let gpStatus;
     try {
-      const gpStatus = await fetchPatentStatus(query);
-      if (gpStatus.exists && !gpStatus.active && gpStatus.statusText) {
-        console.log(`[diagnose] patent ${query} is invalid (${gpStatus.statusText}), skipping LLM call`);
-        const invalidPatent = {
-          id: query,
-          title: `特許第${query}号`,
-          applicant: "",
-          applicantType: "",
-          registrationDate: "",
-          filingDate: "",
-          category: "",
-          status: gpStatus.statusText,
-          officialUrl: `https://www.j-platpat.inpit.go.jp/`,
-          metrics: {}
-        };
-        // 無効結果もキャッシュする（LLM呼び出しを防ぐ）
-        resultCache.set(cacheKey, {
-          patent: invalidPatent,
-          invalid: true,
-          expiresAt: Date.now() + CACHE_TTL_MS
-        });
-        return {
-          resultId: `inv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-          patent: invalidPatent,
-          invalid: true,
-          meta: {
-            mode: "api",
-            cacheHit: false,
-            requestId
-          }
-        };
-      }
+      gpStatus = await fetchPatentStatus(query);
     } catch (error) {
-      // Google Patents チェック失敗時はLLMフローに進む（非ブロッキング）
       console.warn(`[diagnose] Google Patents status check failed: ${error.message}`);
+      throw new Error("patent_lookup_failed");
+    }
+
+    if (!gpStatus.exists) {
+      console.log(`[diagnose] patent ${query} not found on Google Patents`);
+      const notFoundPatent = {
+        id: query,
+        title: `特許第${query}号`,
+        applicant: "",
+        applicantType: "",
+        registrationDate: "",
+        filingDate: "",
+        category: "",
+        status: "不明",
+        officialUrl: `https://www.j-platpat.inpit.go.jp/`,
+        metrics: {}
+      };
+      resultCache.set(cacheKey, { patent: notFoundPatent, invalid: true, expiresAt: Date.now() + CACHE_TTL_MS });
+      return {
+        resultId: `nf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        patent: notFoundPatent,
+        invalid: true,
+        notFound: true,
+        meta: { mode: "api", cacheHit: false, requestId }
+      };
+    }
+
+    if (!gpStatus.active && gpStatus.statusText) {
+      console.log(`[diagnose] patent ${query} is invalid (${gpStatus.statusText}), skipping further lookup`);
+      const invalidPatent = {
+        id: query,
+        title: `特許第${query}号`,
+        applicant: "",
+        applicantType: "",
+        registrationDate: "",
+        filingDate: "",
+        category: "",
+        status: gpStatus.statusText,
+        officialUrl: `https://www.j-platpat.inpit.go.jp/`,
+        metrics: {}
+      };
+      resultCache.set(cacheKey, { patent: invalidPatent, invalid: true, expiresAt: Date.now() + CACHE_TTL_MS });
+      return {
+        resultId: `inv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        patent: invalidPatent,
+        invalid: true,
+        meta: { mode: "api", cacheHit: false, requestId }
+      };
     }
   }
 
@@ -625,6 +642,30 @@ async function getDiagnosis(query, requestId) {
     runner,
     new Promise((_, reject) => setTimeout(() => reject(new Error("upstream_timeout")), REQUEST_TIMEOUT_MS))
   ]);
+
+  if (!rawPatent) {
+    console.log(`[diagnose] patent ${query} not found via JPO API`);
+    const notFoundPatent = {
+      id: query,
+      title: `特許第${query}号`,
+      applicant: "",
+      applicantType: "",
+      registrationDate: "",
+      filingDate: "",
+      category: "",
+      status: "不明",
+      officialUrl: `https://www.j-platpat.inpit.go.jp/`,
+      metrics: {}
+    };
+    resultCache.set(cacheKey, { patent: notFoundPatent, invalid: true, expiresAt: Date.now() + CACHE_TTL_MS });
+    return {
+      resultId: `nf_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      patent: notFoundPatent,
+      invalid: true,
+      notFound: true,
+      meta: { mode: "api", cacheHit: false, requestId }
+    };
+  }
 
   // _jpoRaw はサーバー内部用なのでクライアントには返さない
   const { _jpoRaw, ...patent } = rawPatent;
