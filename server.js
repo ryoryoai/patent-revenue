@@ -20,7 +20,7 @@ const { sendResultEmail, sendDetailedReportEmail, sendPatentInvalidEmail } = req
 const { lookupPatent, normalizePatentNumber } = require("./lib/patent-data");
 const { researchPatent, PatentInvalidError } = require("./lib/patent-research");
 const { fetchPatentStatus } = require("./lib/patent-api");
-const { saveLead, savePatent, updateLeadStatus, getSupabase } = require("./lib/supabase");
+const { saveLead, savePatent, updateLeadStatus, findLeadByEmail, saveDetailedReportRequest, getSupabase } = require("./lib/supabase");
 const { generateAndSaveToken, verifyAndGetData, saveRegistration } = require("./lib/detail-registration");
 const {
   investigateAndRank,
@@ -1100,6 +1100,18 @@ async function handler(req, res) {
         }
       });
       console.log(`[request-detailed-report] sendDetailedReportEmail done: ${patentId}`, JSON.stringify(pdfInfo));
+
+      // DB保存（非同期・非ブロッキング）
+      findLeadByEmail(email).then(lead => {
+        if (!lead) return;
+        updateLeadStatus(lead.id, "detail_started");
+        saveDetailedReportRequest({
+          leadId: lead.id,
+          patentId,
+          rank: result.rank,
+          source: result.source
+        });
+      }).catch(err => console.warn("[request-detailed-report] DB save failed:", err.message));
 
       logRequest({
         requestId,
