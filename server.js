@@ -542,14 +542,14 @@ async function getDiagnosis(query, requestId) {
 
   if (cached && cached.expiresAt > now) {
     metrics.cacheHit += 1;
-    // _jpoRaw をクライアントに返さない
-    const { _jpoRaw, ...cachedPatent } = cached.patent || {};
+    const { _jpoRaw, claimsText, descriptionText, ...cachedPatent } = cached.patent || {};
     return {
       resultId: `cache_${hashValue(cacheKey).slice(0, 10)}`,
       patent: cached.patent ? cachedPatent : null,
       scores: cached.scores || undefined,
       rank: cached.rank || undefined,
       invalid: cached.invalid || false,
+      _internal: { jpoRaw: _jpoRaw || null, claimsText: claimsText || null, descriptionText: descriptionText || null },
       meta: {
         mode: "api",
         cacheHit: true,
@@ -662,14 +662,15 @@ async function getDiagnosis(query, requestId) {
   // 補完後のデータをキャッシュに上書き
   resultCache.set(cacheKey, { patent: rawPatent, scores, rank, expiresAt: Date.now() + CACHE_TTL_MS });
 
-  // _jpoRaw はサーバー内部用なのでクライアントには返さない
-  const { _jpoRaw, ...patent } = rawPatent;
+  // _jpoRaw, claimsText, descriptionText はクライアントに返さないがDB保存用に保持
+  const { _jpoRaw, claimsText, descriptionText, ...patent } = rawPatent;
 
   return {
     resultId: `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     patent,
     scores,
     rank,
+    _internal: { jpoRaw: _jpoRaw || null, claimsText: claimsText || null, descriptionText: descriptionText || null },
     meta: {
       mode: "api",
       cacheHit: false,
@@ -1557,6 +1558,7 @@ async function handler(req, res) {
           applicantType: diagnosis.patent?.applicantType || null,
           ipcCodes: diagnosis.patent?.ipcCodes || null,
           metrics: diagnosis.patent?.metrics || null,
+          jpoRaw: diagnosis._internal?.jpoRaw || null,
           diagnosisResult: diagnosis.scores ? { scores: diagnosis.scores, rank: diagnosis.rank } : null,
           source: diagnosis.meta?.mode || null
         }).then(() => {
@@ -1569,9 +1571,10 @@ async function handler(req, res) {
       }
 
       metrics.diagnoseAllowed += 1;
+      const { _internal, ...diagnosisPublic } = diagnosis;
       respondJson(req, res, 200, {
         requestId,
-        ...diagnosis,
+        ...diagnosisPublic,
         quota: quota.quota,
         leadId: leadId || undefined
       });
