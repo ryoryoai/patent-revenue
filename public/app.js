@@ -563,8 +563,11 @@ function showInputScreen() {
   document.querySelector(".hero").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+let _diagnosisInFlight = false;
 diagnosisForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (_diagnosisInFlight) return;
+  _diagnosisInFlight = true;
 
   const leadName = document.getElementById("lead-name")?.value?.trim() || "";
   const leadCompany = document.getElementById("lead-company")?.value?.trim() || "";
@@ -669,6 +672,7 @@ diagnosisForm.addEventListener("submit", async (event) => {
       showSystemMessage("診断に失敗しました。時間をおいて再度お試しください。", "error");
     }
   } finally {
+    _diagnosisInFlight = false;
     submitButton.classList.remove("btn-loading");
     submitButton.disabled = false;
     submitButton.textContent = originalText;
