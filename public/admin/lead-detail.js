@@ -34,6 +34,9 @@ function renderLead(lead) {
     <div class="field"><div class="label">メール</div><div class="value"><a href="mailto:${escapeHtml(lead.email)}">${escapeHtml(lead.email)}</a></div></div>
     <div class="field"><div class="label">ステータス</div><div class="value">${badgeHtml(lead.status)}</div></div>
     <div class="field"><div class="label">流入元</div><div class="value">${escapeHtml(lead.source || "-")}</div></div>
+    ${lead.utm_data ? `<div class="field"><div class="label">UTM</div><div class="value">${formatUtm(lead.utm_data)}</div></div>` : ""}
+    ${lead.referrer ? `<div class="field"><div class="label">リファラー</div><div class="value">${escapeHtml(lead.referrer)}</div></div>` : ""}
+    ${lead.landing_page ? `<div class="field"><div class="label">LP</div><div class="value">${escapeHtml(lead.landing_page)}</div></div>` : ""}
     <div class="field"><div class="label">登録日時</div><div class="value">${formatDate(lead.created_at)}</div></div>
   `;
   document.getElementById("statusSelect").value = lead.status || "created";
@@ -116,6 +119,17 @@ async function saveNotes() {
   } catch (err) {
     alert("保存に失敗しました");
   }
+}
+
+function formatUtm(utm) {
+  if (!utm || typeof utm !== "object") return "-";
+  const parts = [];
+  if (utm.utm_source) parts.push(`source: ${utm.utm_source}`);
+  if (utm.utm_medium) parts.push(`medium: ${utm.utm_medium}`);
+  if (utm.utm_campaign) parts.push(`campaign: ${utm.utm_campaign}`);
+  if (utm.utm_content) parts.push(`content: ${utm.utm_content}`);
+  if (utm.utm_term) parts.push(`term: ${utm.utm_term}`);
+  return parts.length > 0 ? parts.join(" / ") : "-";
 }
 
 async function deleteLead() {

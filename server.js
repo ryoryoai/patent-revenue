@@ -853,7 +853,7 @@ async function handler(req, res) {
 
       let query = supabase
         .from("leads")
-        .select("id, name, company_name, email, status, source, query_input, admin_notes, created_at, updated_at, patents(patent_number, title), detail_registrations(id, type, status)")
+        .select("id, name, company_name, email, status, source, query_input, utm_data, referrer, landing_page, admin_notes, created_at, updated_at, patents(patent_number, title), detail_registrations(id, type, status)")
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
       if (status) query = query.eq("status", status);
