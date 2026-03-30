@@ -1613,32 +1613,33 @@ async function handler(req, res) {
     try {
       const diagnosis = await getDiagnosis(validated.text, requestId);
 
-      // 特許情報をDB保存（非同期・非ブロッキング）
+      // 特許情報をDB保存（レスポンス前に完了させる — Vercel Serverlessでは非同期だと打ち切られる）
       if (leadId) {
-        savePatent({
-          leadId,
-          patentNumber: validated.text,
-          normalizedNumber: normalizedPatentNumber,
-          title: diagnosis.patent?.title || "",
-          category: diagnosis.patent?.category || "",
-          status: diagnosis.patent?.status || "",
-          filingDate: diagnosis.patent?.filingDate || null,
-          registrationDate: diagnosis.patent?.registrationDate || null,
-          expireDate: diagnosis.patent?.expireDate || null,
-          applicant: diagnosis.patent?.applicant || null,
-          applicantType: diagnosis.patent?.applicantType || null,
-          ipcCodes: diagnosis.patent?.ipcCodes || null,
-          metrics: diagnosis.patent?.metrics || null,
-          jpoRaw: diagnosis._internal?.jpoRaw || null,
-          diagnosisResult: diagnosis.scores ? { scores: diagnosis.scores, rank: diagnosis.rank } : null,
-          source: diagnosis.meta?.mode || null
-        }).then(() => {
+        try {
+          await savePatent({
+            leadId,
+            patentNumber: validated.text,
+            normalizedNumber: normalizedPatentNumber,
+            title: diagnosis.patent?.title || "",
+            category: diagnosis.patent?.category || "",
+            status: diagnosis.patent?.status || "",
+            filingDate: diagnosis.patent?.filingDate || null,
+            registrationDate: diagnosis.patent?.registrationDate || null,
+            expireDate: diagnosis.patent?.expireDate || null,
+            applicant: diagnosis.patent?.applicant || null,
+            applicantType: diagnosis.patent?.applicantType || null,
+            ipcCodes: diagnosis.patent?.ipcCodes || null,
+            metrics: diagnosis.patent?.metrics || null,
+            jpoRaw: diagnosis._internal?.jpoRaw || null,
+            diagnosisResult: diagnosis.scores ? { scores: diagnosis.scores, rank: diagnosis.rank } : null,
+            source: diagnosis.meta?.mode || null
+          });
           if (!diagnosis.invalid) {
-            updateLeadStatus(leadId, "diagnosed");
+            await updateLeadStatus(leadId, "diagnosed");
           }
-        }).catch((err) => {
+        } catch (err) {
           console.warn("[supabase] post-diagnose save failed:", err.message);
-        });
+        }
       }
 
       metrics.diagnoseAllowed += 1;
