@@ -1276,7 +1276,10 @@ async function handler(req, res) {
             department: body.department || null,
             phone: body.phone || null,
             supportMethod: body.supportMethod || null,
-            desiredPrice: body.desiredPrice || null
+            desiredPrice: body.desiredPrice || null,
+            catalogPublishAgreed: body.catalogPublishAgreed || false,
+            privacyAgreed: body.privacyAgreed || false,
+            diagnosisToApplicationSeconds: body.diagnosisToApplicationSeconds || null
           });
           if (reg?.id) {
             await updateDetailRegistrationStatus(reg.id, "reviewed");
@@ -1593,7 +1596,10 @@ async function handler(req, res) {
         referrer: String(ts.referrer || "").slice(0, 500) || null,
         utmData: ts.utm || null,
         landingPage: String(ts.landingPage || "").slice(0, 200) || null,
-        queryInput: String(body.query || "").slice(0, 200) || null
+        queryInput: String(body.query || "").slice(0, 200) || null,
+        useStatus: String(body.useStatus || "").slice(0, 20) || null,
+        salesRange: String(body.salesRange || "").slice(0, 20) || null,
+        contribution: String(body.contribution || "").slice(0, 10) || null
       });
       leadId = leadRecord?.id || null;
       logRequest({

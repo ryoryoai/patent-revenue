@@ -129,6 +129,7 @@ if (toggleOptions && extraFields) {
   toggleOptions.addEventListener("click", () => {
     const isHidden = extraFields.classList.toggle("hidden");
     toggleOptions.textContent = isHidden ? "精度を上げる追加入力" : "追加入力を閉じる";
+    if (!isHidden) trackEvent("extra_options_opened");
   });
 }
 
@@ -342,13 +343,16 @@ function getTrafficSource() {
 
 const _trafficSource = getTrafficSource();
 
-async function fetchPatentInfo(query, challengeToken = "", leadFields = {}) {
+async function fetchPatentInfo(query, challengeToken = "", leadFields = {}, extraInputs = {}) {
   const body = JSON.stringify({
     query,
     captchaToken: challengeToken || undefined,
     name: leadFields.name || undefined,
     company: leadFields.company || undefined,
     email: leadFields.email || undefined,
+    useStatus: extraInputs.useStatus || undefined,
+    salesRange: extraInputs.salesRange || undefined,
+    contribution: extraInputs.contribution || undefined,
     trafficSource: _trafficSource
   });
   let response;
@@ -652,6 +656,10 @@ diagnosisForm.addEventListener("submit", async (event) => {
       name: leadName,
       company: leadCompany,
       email: leadEmail
+    }, {
+      useStatus: input.useStatus,
+      salesRange: input.salesRange,
+      contribution: input.contribution
     });
     const _elapsed = Date.now() - _diagStart;
     if (_elapsed < _MIN_DISPLAY_MS) await new Promise(r => setTimeout(r, _MIN_DISPLAY_MS - _elapsed));
@@ -702,7 +710,8 @@ diagnosisForm.addEventListener("submit", async (event) => {
       valueRange,
       route,
       meta: diagnosis.meta || {},
-      leadId: diagnosis.leadId || null
+      leadId: diagnosis.leadId || null,
+      diagnosedAt: Date.now()
     };
 
     renderResult(latestResult);
@@ -765,6 +774,7 @@ if (detailedReportBtn) {
     if (accordion.classList.contains("hidden")) {
       // アコーディオン展開
       accordion.classList.remove("hidden");
+      trackEvent("detailed_report_form_opened", { patent_id: latestResult?.patent?.id });
       detailedReportBtn.textContent = "フォームを閉じる";
       detailedReportBtn.classList.remove("btn-primary");
       detailedReportBtn.classList.add("btn-ghost");
@@ -848,7 +858,10 @@ if (regForm) {
           department: document.getElementById("reg-department")?.value || "",
           phone: document.getElementById("reg-phone")?.value || "",
           supportMethod: document.getElementById("reg-support-method")?.value || "",
-          desiredPrice: document.getElementById("reg-desired-price")?.value || ""
+          desiredPrice: document.getElementById("reg-desired-price")?.value || "",
+          catalogPublishAgreed: document.getElementById("reg-patent-publish-agree")?.checked || false,
+          privacyAgreed: document.getElementById("reg-privacy-agree")?.checked || false,
+          diagnosisToApplicationSeconds: latestResult?.diagnosedAt ? Math.round((Date.now() - latestResult.diagnosedAt) / 1000) : null
         })
       });
 
