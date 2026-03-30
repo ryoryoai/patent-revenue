@@ -97,8 +97,9 @@ async function loadRegistrations() {
       tr.onclick = () => { window.location.href = `/admin/lead-detail.html?id=${reg.lead_id}`; };
       tr.innerHTML = `
         <td>${formatDate(reg.created_at)}</td>
-        <td>${escapeHtml(reg.type)}</td>
-        <td>${escapeHtml(reg.contact_name)}</td>
+        <td>${escapeHtml(reg.leads?.name || reg.contact_name || "-")}</td>
+        <td>${escapeHtml(reg.leads?.email || "-")}</td>
+        <td>${escapeHtml(reg.type === "listing" ? "売却/ライセンス" : reg.type || "-")}</td>
         <td>${escapeHtml(reg.desired_price || "-")}</td>
         <td>${escapeHtml(reg.support_method || "-")}</td>
         <td>${badgeHtml(reg.status)}</td>

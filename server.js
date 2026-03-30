@@ -910,7 +910,7 @@ async function handler(req, res) {
       const offset = Number(adminUrl.searchParams.get("offset") || 0);
       let query = supabase
         .from("detail_registrations")
-        .select("id, lead_id, patent_id, type, department, contact_name, phone, desired_price, support_method, status, admin_notes, created_at, updated_at")
+        .select("id, lead_id, patent_id, type, department, contact_name, phone, desired_price, support_method, message, status, admin_notes, created_at, updated_at, leads(name, email)")
         .order("created_at", { ascending: false }).range(offset, offset + limit - 1);
       if (status) query = query.eq("status", status);
       const { data, error } = await query;
@@ -1272,7 +1272,11 @@ async function handler(req, res) {
             leadId: lead.id,
             patentId,
             rank: result.rank,
-            source: result.source
+            source: result.source,
+            department: body.department || null,
+            phone: body.phone || null,
+            supportMethod: body.supportMethod || null,
+            desiredPrice: body.desiredPrice || null
           });
           if (reg?.id) {
             await updateDetailRegistrationStatus(reg.id, "reviewed");
